@@ -1260,7 +1260,15 @@ function initFirebaseSync() {
 }
 
 function applyReadOnlyFromOwnership() {
-  if (!isOwner) {
+  if (isOwner) {
+    readOnly = false;
+    document.body.classList.remove('readonly-mode');
+    const btn = document.getElementById('btnReadOnly');
+    if (btn) {
+      btn.disabled = false;
+      btn.title = 'Bloquea todas las ediciones para evitar cambios accidentales';
+    }
+  } else {
     readOnly = true;
     document.body.classList.add('readonly-mode');
     const btn = document.getElementById('btnReadOnly');
@@ -3300,7 +3308,11 @@ function clearLog() {
 }
 
 // ── READ-ONLY MODE ────────────────────────────────────────────────────────────
-let readOnly = false;
+// Arranca SIEMPRE bloqueado hasta que Firebase confirme si sos el dueño.
+// Así no hay ni un instante en que un visitante pueda editar antes de que
+// la autenticación anónima resuelva quién es quién.
+let readOnly = true;
+document.body.classList.add('readonly-mode');
 
 function toggleReadOnly() {
   readOnly = !readOnly;
