@@ -392,6 +392,15 @@ body.readonly-mode #pinModalOverlay .btn {
   border-color: rgba(245,166,35,0.4);
   box-shadow: 0 0 12px rgba(245,166,35,0.15);
 }
+#btnReadOnly.ro-banner {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; padding: 13px 16px; margin-bottom: 16px;
+  border-radius: var(--radius-lg); font-size: 13px; font-weight: 700;
+  background: rgba(245,166,35,0.08); border: 1px dashed rgba(245,166,35,0.45);
+  color: var(--amber);
+}
+#btnReadOnly.ro-banner:hover { background: rgba(245,166,35,0.15); }
+#btnReadOnly.ro-banner i { font-size: 15px; }
 .readonly-banner {
   display: none; position: sticky; top: 0; z-index: 8000;
   background: rgba(245,166,35,0.12); border-bottom: 1px solid rgba(245,166,35,0.3);
@@ -928,10 +937,6 @@ body.view-summary .full-view { display: none; }
       <button type="button" class="tab" data-tab="log" role="tab" aria-selected="false" aria-controls="tab-log" id="tabtrigger-log">Log</button>
     </div>
 
-    <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales" style="margin:12px 0 0;">
-      <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
-    </button>
-
     <!-- TAB ABONO -->
     <div class="tab-panel active" id="tab-abono" role="tabpanel" aria-labelledby="tabtrigger-abono">
       <div class="payment-panel">
@@ -968,6 +973,11 @@ body.view-summary .full-view { display: none; }
           <div class="btn-row">
             <button type="button" class="btn btn-ghost" id="btnExportCSV"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
             <button type="button" class="btn btn-danger" id="btnResetAll">Reiniciar todo</button>
+          </div>
+          <div id="roSlotAbono">
+            <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales">
+              <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
+            </button>
           </div>
           <button type="button" class="btn btn-ghost" id="btnExportImage" style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
             <i class="fa-solid fa-image"></i> Exportar resumen como imagen
@@ -1043,6 +1053,7 @@ body.view-summary .full-view { display: none; }
     <div class="tab-panel" id="tab-hoy" role="tabpanel" aria-labelledby="tabtrigger-hoy">
       <div class="payment-panel">
         <div class="panel-section" style="border:none;padding:0">
+          <div id="roSlotHoy"></div>
           <div class="panel-section-title">Saldo exacto en cualquier fecha</div>
           <div class="field-group">
             <label class="field-label" for="fechaConsulta">Consultar saldo al día</label>
@@ -3401,7 +3412,7 @@ function clearLog() {
 const EDIT_PIN = '2927';
 let readOnly = true;
 document.body.classList.add('readonly-mode');
-document.addEventListener('DOMContentLoaded', () => { _showOnlyDebeHoyTab(); });
+document.addEventListener('DOMContentLoaded', () => { _showOnlyDebeHoyTab(); _placeReadOnlyButton(); });
 
 function toggleReadOnly() {
   if (readOnly) {
@@ -3411,12 +3422,29 @@ function toggleReadOnly() {
   }
 }
 
+// Mueve el botón de solo lectura a la ubicación correcta:
+// - Bloqueado: arriba de la pestaña "¿Cuánto debo hoy?" como banner llamativo.
+// - Desbloqueado: de vuelta a su lugar normal junto a los demás botones.
+function _placeReadOnlyButton() {
+  const btn = document.getElementById('btnReadOnly');
+  const label = document.getElementById('roLabel');
+  if (!btn) return;
+  if (readOnly) {
+    document.getElementById('roSlotHoy').appendChild(btn);
+    btn.classList.add('ro-banner');
+    if (label) label.textContent = 'Vista de solo lectura — toca para desbloquear con PIN';
+  } else {
+    document.getElementById('roSlotAbono').appendChild(btn);
+    btn.classList.remove('ro-banner');
+    if (label) label.textContent = 'Solo lectura';
+  }
+}
+
 function _setReadOnly(value) {
   readOnly = value;
   document.body.classList.toggle('readonly-mode', readOnly);
   const btn   = document.getElementById('btnReadOnly');
   const icon  = document.getElementById('roIcon');
-  const label = document.getElementById('roLabel');
   document.querySelectorAll('tbody input, tbody select, tbody textarea').forEach(el => {
     if (readOnly) { el.setAttribute('tabindex', '-1'); el.setAttribute('disabled', ''); }
     else { el.removeAttribute('tabindex'); el.removeAttribute('disabled'); }
@@ -3425,16 +3453,15 @@ function _setReadOnly(value) {
     _showOnlyDebeHoyTab();
     btn.classList.add('active-lock');
     icon.className = 'fa-solid fa-lock-open';
-    label.textContent = 'Desbloquear';
     showToast('Modo solo lectura activado', 'warn', 3000);
     addLog('edit', 'Modo solo lectura <strong>activado</strong>');
   } else {
     btn.classList.remove('active-lock');
     icon.className = 'fa-solid fa-lock';
-    label.textContent = 'Solo lectura';
     showToast('Edición desbloqueada', 'success', 2500);
     addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
   }
+  _placeReadOnlyButton();
 }
 
 // Si la pestaña activa es una de las que se ocultan en modo solo lectura
