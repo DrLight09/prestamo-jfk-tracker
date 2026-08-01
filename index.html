@@ -519,54 +519,129 @@ body.readonly-mode .readonly-banner { display: block; }
   .table-scroll { overflow-x: visible; }
   table, thead, tbody, th, td, tr { display: block; }
   thead { display: none; }
+  table { min-width: unset; }
+
   tbody tr {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr auto;
+    grid-template-areas:
+      "chk   num   num   badge"
+      "chk   fecha fecha badge"
+      "cap   cap   int   int"
+      "cbase cbase gmf   gmf"
+      "tot   tot   sal   sal"
+      "fpago fpago fpago fpago";
+    column-gap: 8px;
+    row-gap: 7px;
+    align-items: start;
     background: var(--bg3);
     border: 1px solid var(--border2);
     border-radius: var(--radius-lg);
     margin-bottom: 10px;
-    padding: 12px;
-    white-space: normal;
+    padding: 13px;
   }
   tbody tr.row-paid  { background: rgba(45,212,160,0.05); }
   tbody tr.row-early { background: rgba(45,212,160,0.07); }
   tbody tr.row-late  { background: rgba(240,100,122,0.05); }
   tbody tr.row-today { background: rgba(91,141,239,0.07); outline: 1px solid rgba(91,141,239,0.25); }
+
   tbody td {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    text-align: right;
-    padding: 5px 0;
     border: none;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
+    padding: 0;
+    margin: 0;
+    text-align: left;
     white-space: normal;
-    min-height: 28px;
+    font-size: 12px;
+    min-height: 0;
   }
-  tbody td::before {
+  tbody td::before { content: none; } /* apagamos la etiqueta genérica; cada celda define la suya */
+
+  /* Encabezado de la tarjeta: checkbox + número/fecha + estado ────────── */
+  td[data-label="Ok"] { grid-area: chk; align-self: center; padding-right: 2px; }
+  td[data-label="Ok"] input[type="checkbox"] { width: 21px; height: 21px; accent-color: var(--green); }
+
+  td[data-label="N°"] {
+    grid-area: num; align-self: end;
+    font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--text);
+  }
+  td[data-label="N°"]::before {
+    content: "Cuota "; font-size: 11px; font-weight: 600; color: var(--text3);
+    text-transform: none; letter-spacing: 0;
+  }
+
+  td[data-label="Fecha"] { grid-area: fecha; align-self: start; font-size: 11.5px; color: var(--text2); }
+
+  td[data-label="Estado"] {
+    grid-area: badge; display: flex; flex-direction: column; align-items: flex-end;
+    justify-content: center; gap: 4px;
+  }
+  td[data-label="Estado"] .status-badge { margin-left: 0 !important; }
+
+  /* Divisor visual entre el encabezado y las cifras ───────────────────── */
+  td[data-label="Capital"] { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 1px; }
+
+  /* Celdas numéricas como mini "stat tiles" ────────────────────────────  */
+  td[data-label="Capital"],
+  td[data-label="Interés real"],
+  td[data-label="Cuota base"],
+  td[data-label="GMF"],
+  td[data-label="Total real"],
+  td[data-label="Saldo"] {
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  td[data-label="Capital"] { grid-area: cap; border-top: none; padding-top: 7px; }
+  td[data-label="Interés real"] { grid-area: int; }
+  td[data-label="Cuota base"] { grid-area: cbase; }
+  td[data-label="GMF"] { grid-area: gmf; }
+  td[data-label="Total real"] { grid-area: tot; }
+  td[data-label="Saldo"] { grid-area: sal; }
+
+  td[data-label="Capital"]::before,
+  td[data-label="Interés real"]::before,
+  td[data-label="Cuota base"]::before,
+  td[data-label="GMF"]::before,
+  td[data-label="Total real"]::before,
+  td[data-label="Saldo"]::before {
     content: attr(data-label);
-    font-size: 10px;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-    margin-right: 8px;
-    flex-shrink: 0;
-    padding-top: 2px;
+    font-size: 9px; font-weight: 600; color: var(--text3);
+    text-transform: uppercase; letter-spacing: 0.5px;
   }
-  /* On mobile, col-extra cells are hidden in simple mode but shown by default in full mode */
-  /* Always hide Días and Ahorro abono on mobile for readability */
+  td[data-label="Capital"] > div { align-items: flex-start !important; }
+  td[data-label="Capital"] .num,
+  td[data-label="Interés real"] .num,
+  td[data-label="Cuota base"] .num,
+  td[data-label="GMF"] .num,
+  td[data-label="Total real"] .num,
+  td[data-label="Saldo"] .saldo-cell { font-size: 12.5px; }
+  td[data-label="GMF"] span[data-gmf] { display: inline-flex; }
+
+  /* Fecha de pago, a todo el ancho ──────────────────────────────────────  */
+  td[data-label="Fecha pago"] {
+    grid-area: fpago; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 1px;
+  }
+  td[data-label="Fecha pago"]::before {
+    content: "Fecha real de pago"; display: block; font-size: 9px; font-weight: 600;
+    color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+
+  /* Siempre ocultos en móvil por espacio (igual que antes) ─────────────  */
   tbody td[data-label="Días"],
   tbody td[data-label="Ahorro abono"],
   tbody td[data-label="Nota"] { display: none; }
 
-  /* hide eliminated rows' labels */
   tbody tr.row-eliminated td { opacity: 0.5; }
-  
-  table { min-width: unset; }
+
   .tbl-date { width: 100%; }
   .tbl-note { width: 100%; }
 }
+
 
 /* ── VIEW MODE TOGGLE BAR ────────────────────────────────────────────── */
 .view-mode-bar {
