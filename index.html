@@ -401,6 +401,18 @@ body.readonly-mode #pinModalOverlay .btn {
 }
 body.readonly-mode .readonly-banner { display: block; }
 
+/* En modo solo lectura, lo único que le sirve al visitante es "¿Cuánto debo
+   hoy?" — ocultamos las demás pestañas (edición de abonos, verificación
+   bancaria, log de cambios) por completo. */
+body.readonly-mode .tab[data-tab="abono"],
+body.readonly-mode .tab[data-tab="verificacion"],
+body.readonly-mode .tab[data-tab="log"],
+body.readonly-mode #tab-abono,
+body.readonly-mode #tab-verificacion,
+body.readonly-mode #tab-log {
+  display: none !important;
+}
+
 /* AUDIT LOG */
 .log-entry {
   display: flex; gap: 10px; padding: 8px 10px;
@@ -916,6 +928,10 @@ body.view-summary .full-view { display: none; }
       <button type="button" class="tab" data-tab="log" role="tab" aria-selected="false" aria-controls="tab-log" id="tabtrigger-log">Log</button>
     </div>
 
+    <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales" style="margin:12px 0 0;">
+      <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
+    </button>
+
     <!-- TAB ABONO -->
     <div class="tab-panel active" id="tab-abono" role="tabpanel" aria-labelledby="tabtrigger-abono">
       <div class="payment-panel">
@@ -953,9 +969,6 @@ body.view-summary .full-view { display: none; }
             <button type="button" class="btn btn-ghost" id="btnExportCSV"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
             <button type="button" class="btn btn-danger" id="btnResetAll">Reiniciar todo</button>
           </div>
-          <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales" style="margin-top:7px;">
-            <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
-          </button>
           <button type="button" class="btn btn-ghost" id="btnExportImage" style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
             <i class="fa-solid fa-image"></i> Exportar resumen como imagen
           </button>
@@ -3388,6 +3401,7 @@ function clearLog() {
 const EDIT_PIN = '2927';
 let readOnly = true;
 document.body.classList.add('readonly-mode');
+document.addEventListener('DOMContentLoaded', () => { _showOnlyDebeHoyTab(); });
 
 function toggleReadOnly() {
   if (readOnly) {
@@ -3408,6 +3422,7 @@ function _setReadOnly(value) {
     else { el.removeAttribute('tabindex'); el.removeAttribute('disabled'); }
   });
   if (readOnly) {
+    _showOnlyDebeHoyTab();
     btn.classList.add('active-lock');
     icon.className = 'fa-solid fa-lock-open';
     label.textContent = 'Desbloquear';
@@ -3419,6 +3434,19 @@ function _setReadOnly(value) {
     label.textContent = 'Solo lectura';
     showToast('Edición desbloqueada', 'success', 2500);
     addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
+  }
+}
+
+// Si la pestaña activa es una de las que se ocultan en modo solo lectura
+// (Abono capital / Verificación banco / Log), cambia a "¿Cuánto debo hoy?"
+// para que siempre quede algo útil visible.
+function _showOnlyDebeHoyTab() {
+  const hiddenTabs = ['abono', 'verificacion', 'log'];
+  const activeTab = document.querySelector('.tab.active');
+  const activeName = activeTab ? activeTab.getAttribute('data-tab') : null;
+  if (!activeTab || hiddenTabs.includes(activeName)) {
+    const hoyBtn = document.getElementById('tabtrigger-hoy');
+    if (hoyBtn) switchTab('hoy', hoyBtn);
   }
 }
 
