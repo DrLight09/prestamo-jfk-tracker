@@ -3452,14 +3452,16 @@ function _setReadOnly(value) {
   if (readOnly) {
     _showOnlyDebeHoyTab();
     btn.classList.add('active-lock');
-    icon.className = 'fa-solid fa-lock-open';
+    icon.className = 'fa-solid fa-lock';
     showToast('Modo solo lectura activado', 'warn', 3000);
     addLog('edit', 'Modo solo lectura <strong>activado</strong>');
   } else {
     btn.classList.remove('active-lock');
-    icon.className = 'fa-solid fa-lock';
+    icon.className = 'fa-solid fa-lock-open';
     showToast('Edición desbloqueada', 'success', 2500);
     addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
+    const abonoBtn = document.getElementById('tabtrigger-abono');
+    if (abonoBtn) switchTab('abono', abonoBtn);
   }
   _placeReadOnlyButton();
 }
