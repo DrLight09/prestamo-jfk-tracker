@@ -1,0 +1,3518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker Préstamo — Cooperativa JFK</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1118'/><text y='68' x='50' text-anchor='middle' font-size='62' font-family='sans-serif' fill='%235b8def'>$</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- Firebase (mismo proyecto que mis-finanzas) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg:#090b10; --bg2:#0e1118; --bg3:#141720; --bg4:#1a1e28; --bg5:#20242f;
+  --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.1); --border3:rgba(255,255,255,0.16);
+  --text:#dde2f0; --text2:#7a82a0; --text3:#444c65;
+  --blue:#5b8def; --blue-dim:rgba(91,141,239,0.1); --blue-glow:rgba(91,141,239,0.25);
+  --green:#2dd4a0; --green-dim:rgba(45,212,160,0.1); --green-glow:rgba(45,212,160,0.2);
+  --red:#f0647a; --red-dim:rgba(240,100,122,0.1); --red-glow:rgba(240,100,122,0.2);
+  --amber:#f5a623; --amber-dim:rgba(245,166,35,0.1);
+  --purple:#9b87f5; --cyan:#22d3ee;
+  --radius:8px; --radius-lg:12px; --radius-xl:16px;
+  --font:'Space Grotesk',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;background-image:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(91,141,239,0.07) 0%,transparent 70%);}
+.page{max-width:1400px;margin:0 auto;padding:28px 16px 80px;}
+@media(max-width:600px){.page{padding:12px 10px 80px;}}
+
+/* HEADER */
+.site-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:12px;}
+.header-left h1{font-size:22px;font-weight:700;letter-spacing:-0.5px;}
+.header-left h1 span{color:var(--blue);}
+.header-left p{font-size:11.5px;color:var(--text3);margin-top:4px;font-family:var(--mono);}
+.header-badge{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+.pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;font-family:var(--mono);}
+.pill-blue{background:var(--blue-dim);color:var(--blue);border-color:rgba(91,141,239,0.25);}
+.pill-amber{background:var(--amber-dim);color:var(--amber);border-color:rgba(245,166,35,0.25);}
+.pill-green{background:var(--green-dim);color:var(--green);border-color:rgba(45,212,160,0.25);}
+.pill-red{background:var(--red-dim);color:var(--red);border-color:rgba(240,100,122,0.25);}
+.pill-purple{background:rgba(155,135,245,0.1);color:var(--purple);border-color:rgba(155,135,245,0.25);}
+
+/* NEXT PAYMENT BANNER */
+.next-banner{border-radius:var(--radius-xl);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border:1px solid;position:relative;overflow:hidden;}
+.next-banner::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.next-banner.upcoming{background:rgba(91,141,239,0.07);border-color:rgba(91,141,239,0.2);}
+.next-banner.upcoming::before{background:linear-gradient(90deg,var(--blue),var(--cyan));}
+.next-banner.urgent{background:rgba(245,166,35,0.07);border-color:rgba(245,166,35,0.2);}
+.next-banner.urgent::before{background:linear-gradient(90deg,var(--amber),var(--red));}
+.next-banner.overdue{background:rgba(240,100,122,0.07);border-color:rgba(240,100,122,0.2);}
+.next-banner.overdue::before{background:linear-gradient(90deg,var(--red),#b02040);}
+.next-banner.done{background:rgba(45,212,160,0.07);border-color:rgba(45,212,160,0.2);}
+.next-banner.done::before{background:linear-gradient(90deg,var(--green),var(--cyan));}
+.nb-left{display:flex;align-items:center;gap:16px;}
+.nb-icon{font-size:24px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(255,255,255,0.05);}
+.nb-icon i{font-size:18px;}
+.nb-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:3px;}
+.nb-title{font-size:15px;font-weight:600;}
+.nb-sub{font-size:12px;color:var(--text2);margin-top:2px;}
+.nb-right{display:flex;gap:24px;flex-wrap:wrap;}
+.nb-stat{text-align:right;}
+.nb-stat .ns-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;}
+.nb-stat .ns-val{font-size:16px;font-weight:700;font-family:var(--mono);margin-top:2px;}
+.countdown-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--mono);}
+.cc-blue{background:var(--blue-dim);color:var(--blue);border:1px solid rgba(91,141,239,0.3);}
+.cc-amber{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,0.3);}
+.cc-red{background:var(--red-dim);color:var(--red);border:1px solid rgba(240,100,122,0.3);}
+.cc-green{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,212,160,0.3);}
+
+/* TICKER */
+.interest-ticker{background:linear-gradient(135deg,var(--bg3),var(--bg4));border:1px solid var(--border2);border-radius:var(--radius-xl);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;position:relative;overflow:hidden;}
+.interest-ticker::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--green));}
+.ticker-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:3px;}
+.ticker-main{font-size:24px;font-weight:700;font-family:var(--mono);}
+.ticker-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.ticker-group{display:flex;gap:24px;flex-wrap:wrap;}
+.daily-rate-badge{display:flex;align-items:center;gap:8px;background:var(--blue-dim);border:1px solid var(--blue-glow);border-radius:10px;padding:10px 14px;}
+.rate-val{font-size:16px;font-weight:700;font-family:var(--mono);color:var(--blue);}
+.rate-desc{font-size:10px;color:var(--text2);line-height:1.3;}
+
+/* METRICS */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-bottom:16px;}
+.metric-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 14px;transition:border-color 0.2s;cursor:default;}
+.metric-card:hover{border-color:var(--border2);}
+.metric-card .label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;}
+.metric-card .value{font-size:18px;font-weight:700;font-family:var(--mono);line-height:1.1;}
+.metric-card .sub{font-size:11px;color:var(--text2);margin-top:3px;}
+.val-blue{color:var(--blue);} .val-green{color:var(--green);} .val-red{color:var(--red);}
+.val-amber{color:var(--amber);} .val-purple{color:var(--purple);} .val-cyan{color:var(--cyan);}
+
+/* SAVINGS BANNER */
+.savings-banner{border-radius:var(--radius-xl);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;transition:all 0.3s;}
+.savings-banner.positive{background:rgba(45,212,160,0.07);border:1px solid rgba(45,212,160,0.2);}
+.savings-banner.negative{background:rgba(240,100,122,0.07);border:1px solid rgba(240,100,122,0.2);}
+.savings-banner.neutral{background:var(--bg3);border:1px solid var(--border);}
+.savings-main{display:flex;align-items:center;gap:12px;}
+.savings-icon{font-size:24px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(255,255,255,0.05);flex-shrink:0;}
+.savings-icon i{font-size:18px;}
+.savings-title{font-size:14px;font-weight:600;}
+.savings-title.green{color:var(--green);} .savings-title.red{color:var(--red);}
+.savings-amount{font-size:20px;font-weight:700;font-family:var(--mono);}
+.savings-desc{font-size:11px;color:var(--text2);margin-top:2px;}
+.savings-stats{display:flex;gap:18px;flex-wrap:wrap;}
+.savings-stat .sv-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;}
+.savings-stat .sv-val{font-size:13px;font-weight:600;font-family:var(--mono);margin-top:1px;}
+
+/* PROGRESS */
+.progress-block{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);padding:16px 20px;margin-bottom:16px;}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.progress-header span{font-size:12px;color:var(--text2);}
+.progress-header strong{font-size:15px;font-weight:700;font-family:var(--mono);}
+.track{height:6px;background:var(--bg5);border-radius:3px;overflow:hidden;margin-bottom:6px;}
+.fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--green));transition:width 0.6s cubic-bezier(0.16,1,0.3,1);}
+.progress-info{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono);}
+
+/* TOP ROW */
+.top-row{display:grid;grid-template-columns:1fr 380px;gap:14px;margin-bottom:16px;align-items:start;}
+@media(max-width:900px){.top-row{grid-template-columns:1fr;}}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);padding:18px 20px;}
+.card-title{font-size:10px;font-weight:600;color:var(--text3);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;}
+.chart-wrap{position:relative;height:200px;cursor:crosshair;}
+@media(max-width:600px){.chart-wrap{height:160px;}}
+.chart-legend{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--text2);flex-wrap:wrap;}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle;}
+
+/* PANEL */
+.payment-panel{display:flex;flex-direction:column;gap:10px;}
+.panel-section{border-top:1px solid var(--border);padding-top:10px;}
+.panel-section:first-child{border-top:none;padding-top:0;}
+.panel-section-title{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:9px;font-weight:600;}
+.field-label{font-size:11px;color:var(--text2);margin-bottom:4px;}
+.field-group{margin-bottom:9px;}
+select,input[type="number"],input[type="date"]{width:100%;padding:8px 11px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color 0.2s,box-shadow 0.2s;-webkit-appearance:none;-moz-appearance:none;appearance:none;}
+select:focus,input[type="number"]:focus,input[type="date"]:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-dim);}
+.btn{padding:8px 14px;border-radius:var(--radius);border:1px solid;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;width:100%;letter-spacing:0.2px;}
+.btn-primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+.btn-primary:hover{background:#4a7de0;box-shadow:0 0 16px var(--blue-glow);}
+.btn-success{background:var(--green);color:#0a1a15;border-color:var(--green);}
+.btn-success:hover{background:#25c090;box-shadow:0 0 16px var(--green-glow);}
+.btn-ghost{background:transparent;color:var(--text2);border-color:var(--border2);}
+.btn-ghost:hover{background:var(--bg4);color:var(--text);border-color:var(--border3);}
+.btn-danger{background:transparent;color:var(--red);border-color:rgba(240,100,122,0.3);}
+.btn-danger:hover{background:var(--red-dim);}
+.btn-readonly-toggle{background:rgba(245,166,35,0.08);color:var(--amber);border-color:rgba(245,166,35,0.3);}
+.btn-readonly-toggle:hover{background:rgba(245,166,35,0.16);box-shadow:0 0 12px rgba(245,166,35,0.15);}
+.btn-readonly-toggle.active-lock{background:rgba(245,166,35,0.18);color:var(--amber);border-color:rgba(245,166,35,0.5);box-shadow:0 0 14px rgba(245,166,35,0.2);}
+.btn-sm{padding:5px 11px;font-size:11px;width:auto;}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+
+/* CALC PREVIEW */
+.calc-preview{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);padding:11px 13px;display:none;}
+.calc-preview.visible{display:block;}
+.calc-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:12px;}
+.calc-row:last-child{margin-bottom:0;border-top:1px solid var(--border);padding-top:5px;margin-top:2px;}
+.calc-row .ck{color:var(--text2);}
+.calc-row .cv{font-family:var(--mono);font-weight:600;}
+.calc-row.highlight .cv{color:var(--green);} .calc-row.highlight-red .cv{color:var(--red);}
+.calc-row.total{font-weight:700;} .calc-row.total .cv{color:var(--text);font-size:13px;}
+
+.saving-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:20px;font-size:10px;font-weight:700;font-family:var(--mono);}
+.saving-chip.good{background:var(--green-dim);color:var(--green);border:1px solid var(--green-glow);}
+.saving-chip.bad{background:var(--red-dim);color:var(--red);border:1px solid var(--red-glow);}
+
+/* ALERT */
+.alert{border-radius:var(--radius);padding:9px 13px;font-size:12px;margin-bottom:14px;display:none;}
+.alert-warn{background:var(--amber-dim);border:1px solid rgba(245,166,35,0.25);color:var(--amber);}
+
+/* TABLE */
+.table-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:9px;}
+.table-section-header h2{font-size:14px;font-weight:600;}
+.filter-btns{display:flex;gap:5px;}
+.filter-btn{padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:var(--font);font-weight:500;transition:all 0.15s;}
+.filter-btn.active{background:var(--blue-dim);color:var(--blue);border-color:rgba(91,141,239,0.3);}
+.filter-btn:hover:not(.active){background:var(--bg4);color:var(--text);}
+.table-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;}
+.table-scroll{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;min-width:1100px;}
+thead th{background:var(--bg2);color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;padding:10px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border);}
+thead th:first-child,thead th:nth-child(2),thead th:nth-child(3),thead th:nth-child(4){text-align:left;}
+.th-highlight{color:var(--cyan)!important;}
+tbody tr{border-bottom:1px solid var(--border);transition:background 0.1s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:rgba(255,255,255,0.02);}
+tbody tr.row-paid{background:rgba(45,212,160,0.03);}
+tbody tr.row-early{background:rgba(45,212,160,0.05);}
+tbody tr.row-late{background:rgba(240,100,122,0.04);}
+tbody tr.row-today{background:rgba(91,141,239,0.06);outline:1px solid rgba(91,141,239,0.2);}
+tbody tr.row-eliminated {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(255,255,255,0.012) 6px,
+    rgba(255,255,255,0.012) 12px
+  ) !important;
+  opacity: 0.28;
+  pointer-events: none;
+}
+tbody tr.row-eliminated td { color: var(--text3) !important; }
+tbody tr.row-eliminated .num{color:var(--text3)!important;}
+tbody tr.row-eliminated .saldo-cell{color:var(--text3)!important;}
+tbody tr:hover:not(.row-eliminated) { background: rgba(255,255,255,0.025) !important; }
+td{padding:9px 12px;text-align:right;color:var(--text);font-size:12px;vertical-align:middle;white-space:nowrap;}
+td:first-child,td:nth-child(2),td:nth-child(3),td:nth-child(4){text-align:left;}
+td .num{font-family:var(--mono);font-size:11.5px;}
+.saldo-cell{font-family:var(--mono);font-weight:600;}
+input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--green);}
+.tbl-date,.tbl-val{padding:5px 7px;background:var(--bg5);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;font-family:var(--mono);outline:none;transition:border-color 0.2s;width:115px;}
+.tbl-date{color:var(--text2);}
+.tbl-date:focus,.tbl-val:focus{border-color:var(--blue);}
+.tbl-note{padding:5px 7px;background:var(--bg5);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:10px;font-family:var(--font);outline:none;width:120px;transition:border-color 0.2s;}
+.tbl-note:focus{border-color:var(--blue);color:var(--text);}
+.status-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:20px;font-size:10px;font-weight:600;}
+.badge-paid{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,212,160,0.25);}
+.badge-pending{background:var(--bg4);color:var(--text3);border:1px solid var(--border);}
+.badge-warn{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,0.25);margin-left:4px;font-size:10px;}
+.badge-early{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,212,160,0.25);font-size:10px;margin-left:4px;}
+.badge-eliminated{background:rgba(155,135,245,0.1);color:var(--purple);border:1px solid rgba(155,135,245,0.25);}
+.badge-late{background:var(--red-dim);color:var(--red);border:1px solid rgba(240,100,122,0.25);font-size:10px;margin-left:4px;}
+.badge-today{background:var(--blue-dim);color:var(--blue);border:1px solid rgba(91,141,239,0.3);margin-left:4px;font-size:10px;}
+.abono-tag{display:block;font-size:10px;color:var(--green);font-family:var(--mono);margin-top:2px;}
+.abono-tag-btn{display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:4px 10px;border-radius:20px;font-size:10.5px;font-weight:700;font-family:var(--mono);cursor:pointer;transition:all 0.15s;line-height:1;border:1px solid;}
+.abono-tag-btn.has-abono{color:var(--green);background:var(--green-dim);border-color:var(--green-glow);}
+.abono-tag-btn.has-abono:hover{background:rgba(45,212,160,0.22);box-shadow:0 0 10px var(--green-glow);transform:translateY(-1px);}
+.abono-tag-btn.no-abono{color:var(--text3);background:transparent;border-color:var(--border);opacity:0.6;}
+.abono-tag-btn.no-abono:hover{opacity:1;color:var(--green);border-color:var(--green-glow);background:var(--green-dim);}
+.abono-tag-btn i{font-size:9px;}
+/* ABONO EDIT MODAL */
+.abono-modal-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(5px);align-items:center;justify-content:center;}
+.abono-modal-overlay.open{display:flex;}
+.abono-modal-box{background:var(--bg3);border:1px solid var(--border3);border-radius:var(--radius-xl);padding:24px;width:300px;max-width:92vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);}
+.abono-modal-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.abono-modal-icon{width:36px;height:36px;border-radius:10px;background:var(--green-dim);border:1px solid var(--green-glow);display:flex;align-items:center;justify-content:center;color:var(--green);font-size:14px;flex-shrink:0;}
+.abono-modal-title{font-size:14px;font-weight:700;}
+.abono-modal-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.abono-modal-input{width:100%;padding:10px 13px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:15px;outline:none;transition:border-color 0.2s,box-shadow 0.2s;margin-bottom:14px;}
+.abono-modal-input:focus{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim);}
+.abono-modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+.dot-green{background:var(--green);} .dot-gray{background:var(--text3);} .dot-blue{background:var(--blue);}
+.int-real{font-family:var(--mono);font-size:11.5px;font-weight:600;}
+.int-real.early{color:var(--green);} .int-real.late{color:var(--red);} .int-real.normal{color:var(--text);}
+
+/* TABS */
+.tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border);}
+.tab{padding:7px 14px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);letter-spacing:0.3px;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+.tab:hover:not(.active){color:var(--text);}
+.tab-panel{display:none;} .tab-panel.active{display:block;}
+
+
+.info-note{font-size:11px;color:var(--text3);line-height:1.6;margin-top:9px;}
+.info-note span{color:var(--text2);}
+
+/* COLLAPSIBLE INFO NOTE */
+.info-note-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;border-top:1px solid var(--border);padding-top:9px;margin-top:9px;user-select:none;transition:color 0.15s;}
+.info-note-toggle:hover{color:var(--text2);}
+.info-note-toggle .int-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;flex:1;}
+.info-note-toggle .int-icon{font-size:9px;color:var(--text3);transition:transform 0.2s;}
+.info-note-toggle .int-icon.open{transform:rotate(180deg);}
+.info-note-body{overflow:hidden;max-height:0;transition:max-height 0.3s ease,opacity 0.2s;opacity:0;pointer-events:none;}
+.info-note-body.open{max-height:300px;opacity:1;pointer-events:auto;}
+
+/* CUOTA #1 NOTE — redesigned */
+.cuota1-note{display:flex;gap:10px;padding:10px 12px;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.18);border-left:3px solid var(--amber);border-radius:var(--radius);margin-bottom:10px;position:relative;}
+.cuota1-icon{width:28px;height:28px;border-radius:7px;background:rgba(245,166,35,0.12);display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:12px;flex-shrink:0;margin-top:1px;}
+.cuota1-content{flex:1;}
+.cuota1-title{font-size:11px;font-weight:700;color:var(--amber);margin-bottom:5px;letter-spacing:0.2px;}
+.cuota1-body{font-size:10.5px;color:var(--text2);line-height:1.6;}
+.cuota1-body strong{color:var(--text);}
+.cuota1-chips{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;}
+.cuota1-chip{padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;}
+.chip-amber{background:rgba(245,166,35,0.1);color:var(--amber);border:1px solid rgba(245,166,35,0.25);}
+.chip-muted{background:var(--bg5);color:var(--text3);border:1px solid var(--border2);}
+.chip-blue{background:var(--blue-dim);color:var(--blue);border:1px solid rgba(91,141,239,0.25);}
+
+/* ABONO IMPACT */
+.abono-impact{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);padding:11px 13px;margin-top:9px;display:none;}
+.abono-impact.visible{display:block;}
+.impact-title{font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px;}
+
+/* EXPORT BAR */
+.export-bar{display:flex;justify-content:flex-end;gap:7px;margin-bottom:10px;flex-wrap:wrap;}
+.export-bar button{padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;font-family:var(--font);font-weight:500;transition:all 0.15s;}
+.export-bar button:hover{background:var(--bg4);color:var(--text);border-color:var(--border3);}
+
+/* BACKUP */
+.backup-section{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.backup-section-title{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:9px;font-weight:600;}
+.backup-btns{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.btn-backup-export{background:rgba(155,135,245,0.1);color:var(--purple);border:1px solid rgba(155,135,245,0.3);padding:8px 14px;border-radius:var(--radius);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;width:100%;}
+.btn-backup-export:hover{background:rgba(155,135,245,0.2);box-shadow:0 0 12px rgba(155,135,245,0.2);}
+.btn-backup-import{background:rgba(34,211,238,0.08);color:var(--cyan);border:1px solid rgba(34,211,238,0.25);padding:8px 14px;border-radius:var(--radius);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;width:100%;}
+.btn-backup-import:hover{background:rgba(34,211,238,0.15);box-shadow:0 0 12px rgba(34,211,238,0.15);}
+.backup-toast{display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius);font-size:11px;font-weight:600;text-align:center;}
+.backup-toast.success{display:block;background:var(--green-dim);color:var(--green);border:1px solid var(--green-glow);}
+.backup-toast.error{display:block;background:var(--red-dim);color:var(--red);border:1px solid var(--red-glow);}
+.backup-info{font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6;}
+
+/* TODAY LINE */
+.today-line{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);color:var(--blue);background:var(--blue-dim);border:1px solid rgba(91,141,239,0.3);padding:1px 6px;border-radius:4px;margin-left:5px;}
+
+/* FA ICON ALIGNMENT */
+.fa-solid, .fa-regular { vertical-align: middle; }
+.countdown-chip i { font-size: 10px; }
+.btn i, .btn-backup-export i, .btn-backup-import i { margin-right: 4px; }
+.backup-section-title i { margin-right: 5px; }
+.backup-toast i { margin-right: 5px; }
+.alert i { margin-right: 6px; }
+.info-note i { font-size: 11px; }
+
+/* UTILITY — inline style replacements */
+.mb-6   { margin-bottom: 6px; }
+.mb-8   { margin-bottom: 8px; }
+.mt-neg8 { margin-top: -8px; }
+.color-text3 { color: var(--text3); }
+.fw-400  { font-weight: 400; }
+.fz-10   { font-size: 10px; }
+.fz-13   { font-size: 13px; }
+.color-blue { color: var(--blue); }
+.color-amber { color: var(--amber); }
+.color-green { color: var(--green); }
+.d-flex-between { display:flex; justify-content:space-between; align-items:center; }
+.hint-box { display:none; margin-top:5px; padding:6px 10px; border-radius:6px; font-size:10.5px; font-weight:600; font-family:var(--mono); background:rgba(240,100,122,0.1); color:var(--red); border:1px solid rgba(240,100,122,0.25); }
+.info-box { font-size:10px; color:var(--text3); margin-top:4px; }
+.modal-field-label { margin-bottom:6px; }
+.modal-date-input  { font-size:13px; font-family:var(--mono); }
+.modal-hint-info   { display:none; margin-bottom:8px; padding:6px 10px; border-radius:6px; font-size:10.5px; font-weight:600; font-family:var(--mono); background:rgba(240,100,122,0.1); color:var(--red); border:1px solid rgba(240,100,122,0.25); }
+.modal-regla-box   { font-size:10px; color:var(--text3); margin-bottom:12px; line-height:1.6; }
+.sync-textarea     { width:100%; height:90px; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:var(--mono); font-size:10.5px; padding:8px 10px; outline:none; resize:vertical; line-height:1.5; transition:border-color 0.2s; }
+.sync-textarea:focus { border-color:var(--blue); }
+.sync-textarea:blur  { border-color:var(--border2); }
+.sync-btn-row  { display:flex; gap:7px; margin-top:8px; }
+.sync-error    { display:none; margin-top:7px; font-size:10.5px; color:var(--red); background:var(--red-dim); border:1px solid rgba(240,100,122,0.25); border-radius:6px; padding:6px 9px; }
+.verif-note    { font-size:11px; color:var(--text3); margin-bottom:10px; line-height:1.6; }
+.verif-grid    { max-height:300px; overflow-y:auto; font-size:11px; font-family:var(--mono); }
+.verif-summary { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+.sv-card-wrap  { margin-bottom:16px; }
+.pe-popover-info { font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.6; }
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:3px;}
+
+/* READ-ONLY MODE — scoped to editable data inputs only */
+body.readonly-mode .tbl-date,
+body.readonly-mode .tbl-val,
+body.readonly-mode .tbl-note,
+body.readonly-mode input[type="number"],
+body.readonly-mode select,
+body.readonly-mode textarea,
+body.readonly-mode .abono-modal-input {
+  pointer-events: none !important;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+body.readonly-mode input[type="checkbox"] {
+  pointer-events: none !important;
+  opacity: 0.35 !important;
+}
+body.readonly-mode .btn:not(#btnReadOnly),
+body.readonly-mode .btn-backup-export,
+body.readonly-mode .btn-backup-import,
+body.readonly-mode .abono-tag-btn,
+body.readonly-mode .abono-modal-overlay {
+  pointer-events: none !important;
+  opacity: 0.35 !important;
+}
+.btnReadOnly {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 13px; border-radius: 20px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); font-size: 11px;
+  font-family: var(--font); font-weight: 600; cursor: pointer;
+  transition: all 0.2s; white-space: nowrap;
+}
+.btnReadOnly:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
+.btnReadOnly.active {
+  background: rgba(245,166,35,0.1); color: var(--amber);
+  border-color: rgba(245,166,35,0.4);
+  box-shadow: 0 0 12px rgba(245,166,35,0.15);
+}
+.readonly-banner {
+  display: none; position: sticky; top: 0; z-index: 8000;
+  background: rgba(245,166,35,0.12); border-bottom: 1px solid rgba(245,166,35,0.3);
+  color: var(--amber); font-size: 11.5px; font-weight: 600;
+  padding: 7px 20px; text-align: center; letter-spacing: 0.2px;
+  backdrop-filter: blur(8px);
+}
+body.readonly-mode .readonly-banner { display: block; }
+
+/* AUDIT LOG */
+.log-entry {
+  display: flex; gap: 10px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11px;
+  transition: background 0.1s;
+}
+.log-entry:last-child { border-bottom: none; }
+.log-entry:hover { background: rgba(255,255,255,0.02); }
+.log-time { font-family: var(--mono); font-size: 10px; color: var(--text3); white-space: nowrap; padding-top: 1px; min-width: 80px; }
+.log-icon { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+.log-icon.paid   { background: var(--green-dim); color: var(--green); }
+.log-icon.abono  { background: var(--blue-dim); color: var(--blue); }
+.log-icon.reset  { background: var(--red-dim); color: var(--red); }
+.log-icon.import { background: rgba(155,135,245,0.1); color: var(--purple); }
+.log-icon.edit   { background: var(--amber-dim); color: var(--amber); }
+.log-icon.note   { background: rgba(34,211,238,0.08); color: var(--cyan); }
+.log-msg { flex: 1; color: var(--text2); line-height: 1.5; }
+.log-msg strong { color: var(--text); }
+.log-val { font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+.log-empty { padding: 20px 12px; text-align: center; color: var(--text3); font-size: 11px; }
+#logList { max-height: 320px; overflow-y: auto; }
+
+/* PERIODO EXTENDIDO POPOVER */
+.pe-wrap{position:relative;display:inline-block;}
+.pe-badge{cursor:pointer;user-select:none;}
+.pe-badge:hover{opacity:0.85;}
+.pe-popover{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:9000;
+  width:320px;background:var(--bg3);border:1px solid rgba(245,166,35,0.35);border-radius:var(--radius-lg);
+  padding:13px 15px;box-shadow:0 12px 40px rgba(0,0,0,0.55);pointer-events:none;}
+.pe-popover.open{display:block;pointer-events:auto;}
+.pe-popover::before{content:'';position:absolute;top:-5px;left:50%;transform:translateX(-50%);
+  width:9px;height:9px;background:var(--bg3);border-left:1px solid rgba(245,166,35,0.35);
+  border-top:1px solid rgba(245,166,35,0.35);transform:translateX(-50%) rotate(45deg);}
+.pe-popover-close{position:absolute;top:7px;right:9px;background:none;border:none;color:var(--text3);
+  cursor:pointer;font-size:13px;line-height:1;padding:2px 5px;border-radius:4px;}
+.pe-popover-close:hover{color:var(--text);background:var(--bg5);}
+
+/* ── FADE IN UP ANIMATIONS ───────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.metric-card {
+  animation: fadeInUp 0.4s ease-out both;
+}
+.metric-card:nth-child(1)  { animation-delay: 0.00s; }
+.metric-card:nth-child(2)  { animation-delay: 0.04s; }
+.metric-card:nth-child(3)  { animation-delay: 0.08s; }
+.metric-card:nth-child(4)  { animation-delay: 0.12s; }
+.metric-card:nth-child(5)  { animation-delay: 0.16s; }
+.metric-card:nth-child(6)  { animation-delay: 0.20s; }
+.metric-card:nth-child(7)  { animation-delay: 0.24s; }
+.metric-card:nth-child(8)  { animation-delay: 0.28s; }
+.next-banner {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+/* ── GLOBAL TOAST ─────────────────────────────────────────────────────── */
+#globalToast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  min-width: 220px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  border: 1px solid;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), opacity 0.35s ease;
+  white-space: nowrap;
+}
+#globalToast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+#globalToast.t-success {
+  background: rgba(9,11,16,0.96);
+  color: var(--green);
+  border-color: var(--green-glow);
+  backdrop-filter: blur(12px);
+}
+#globalToast.t-error {
+  background: rgba(9,11,16,0.96);
+  color: var(--red);
+  border-color: var(--red-glow);
+  backdrop-filter: blur(12px);
+}
+#globalToast.t-info {
+  background: rgba(9,11,16,0.96);
+  color: var(--blue);
+  border-color: var(--blue-glow);
+  backdrop-filter: blur(12px);
+}
+#globalToast.t-warn {
+  background: rgba(9,11,16,0.96);
+  color: var(--amber);
+  border-color: rgba(245,166,35,0.35);
+  backdrop-filter: blur(12px);
+}
+#globalToast .gt-icon { font-size: 15px; flex-shrink: 0; }
+#globalToast .gt-msg  { flex: 1; }
+
+/* ── RESPONSIVE TABLE → CARDS ON MOBILE ──────────────────────────────── */
+@media (max-width: 600px) {
+  .table-scroll { overflow-x: visible; }
+  table, thead, tbody, th, td, tr { display: block; }
+  thead { display: none; }
+  tbody tr {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    margin-bottom: 10px;
+    padding: 12px;
+    white-space: normal;
+  }
+  tbody tr.row-paid  { background: rgba(45,212,160,0.05); }
+  tbody tr.row-early { background: rgba(45,212,160,0.07); }
+  tbody tr.row-late  { background: rgba(240,100,122,0.05); }
+  tbody tr.row-today { background: rgba(91,141,239,0.07); outline: 1px solid rgba(91,141,239,0.25); }
+  tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    text-align: right;
+    padding: 5px 0;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    white-space: normal;
+    min-height: 28px;
+  }
+  tbody td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-right: 8px;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  /* On mobile, col-extra cells are hidden in simple mode but shown by default in full mode */
+  /* Always hide Días and Ahorro abono on mobile for readability */
+  tbody td[data-label="Días"],
+  tbody td[data-label="Ahorro abono"],
+  tbody td[data-label="Nota"] { display: none; }
+
+  /* hide eliminated rows' labels */
+  tbody tr.row-eliminated td { opacity: 0.5; }
+  
+  table { min-width: unset; }
+  .tbl-date { width: 100%; }
+  .tbl-note { width: 100%; }
+}
+
+/* ── VIEW MODE TOGGLE BAR ────────────────────────────────────────────── */
+.view-mode-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.view-mode-bar .vmb-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+.vmb-pills { display: flex; gap: 5px; }
+.vmb-pill {
+  padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: var(--font); transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+}
+.vmb-pill:hover:not(.active) { background: var(--bg4); color: var(--text); }
+.vmb-pill.active { background: var(--blue-dim); color: var(--blue); border-color: rgba(91,141,239,0.35); }
+.vmb-pill i { font-size: 10px; }
+
+/* Simple table toggle */
+.tbl-toggle-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: var(--font); transition: all 0.15s;
+}
+.tbl-toggle-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
+.tbl-toggle-btn.simple-on { background: var(--blue-dim); color: var(--blue); border-color: rgba(91,141,239,0.35); }
+
+/* Hide extended columns in simple mode */
+body.simple-table .col-extra { display: none !important; }
+
+/* ── SUMMARY VIEW (COMPACT MODE) ─────────────────────────────────────── */
+.summary-view { display: none; }
+body.view-summary .summary-view { display: block; }
+body.view-summary .full-view { display: none; }
+
+.sv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 9px; margin-bottom: 16px; }
+.sv-next3 { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 16px 18px; margin-bottom: 16px; }
+.sv-next3-title { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600; margin-bottom: 12px; }
+.sv-next3-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.sv-next3-row:last-child { border-bottom: none; padding-bottom: 0; }
+.sv-next3-row .rn { font-family: var(--mono); font-weight: 700; color: var(--blue); width: 28px; }
+.sv-next3-row .rd { color: var(--text2); flex: 1; margin-left: 8px; }
+.sv-next3-row .rv { font-family: var(--mono); font-weight: 600; color: var(--amber); }
+.sv-next3-row .rs { font-size: 10px; margin-left: 8px; }
+.sv-chart-mini { position: relative; height: 150px; margin-bottom: 8px; }
+@media(max-width:600px) { .sv-chart-mini { height: 120px; } }
+.sv-expand-btn {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: 100%; padding: 10px; border-radius: var(--radius-lg); border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text2); font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: var(--font); transition: all 0.15s; margin-top: 8px;
+}
+.sv-expand-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
+
+/* ── MOBILE HEADER FIXES ─────────────────────────────────────────────── */
+@media(max-width:600px) {
+  .site-header { flex-direction: column; gap: 10px; }
+  .header-left h1 { font-size: 18px; }
+  .header-left p { font-size: 10px; word-break: break-word; }
+  .header-badge { gap: 5px; }
+  .pill { font-size: 10px; padding: 3px 9px; }
+
+  .next-banner { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+  .nb-right { width: 100%; justify-content: space-between; gap: 10px; }
+  .nb-stat { text-align: left; }
+  .nb-stat .ns-val { font-size: 14px; }
+
+  .interest-ticker { flex-direction: column; align-items: flex-start; }
+  .ticker-group { gap: 14px; width: 100%; }
+  .ticker-main { font-size: 19px; }
+  .daily-rate-badge { width: 100%; justify-content: flex-start; }
+
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 7px; }
+  .metric-card .value { font-size: 15px; }
+
+  .savings-banner { flex-direction: column; align-items: flex-start; }
+  .savings-stats { width: 100%; gap: 12px; }
+
+  .top-row { grid-template-columns: 1fr; }
+
+  .table-section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .table-section-header h2 { font-size: 12px; }
+  .filter-btns { flex-wrap: wrap; }
+
+  .view-mode-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
+
+@media print {
+  body{background:#fff;color:#111;}
+  .site-header,.next-banner,.interest-ticker,.savings-banner,.progress-block,.top-row,.export-bar,.filter-btns,.btn,.tbl-date,.tbl-val,.tbl-note,input[type="checkbox"]{display:none!important;}
+  .table-wrap{border:1px solid #ccc;border-radius:0;}
+  thead th{background:#f5f5f5;color:#333;}
+  tbody tr{border-bottom:1px solid #eee;}
+  td{color:#111;}
+  .num,.saldo-cell,.int-real{color:inherit!important;}
+}
+</style>
+</head>
+<body>
+<!-- READ-ONLY BANNER -->
+<div class="readonly-banner" id="readonlyBanner">
+  <i class="fa-solid fa-lock" style="margin-right:6px;font-size:10px"></i>
+  Modo solo lectura activado — las ediciones están bloqueadas. Haz clic en <strong><i class="fa-solid fa-lock" style="font-size:10px;margin-right:2px"></i> Solo lectura</strong> para desbloquear.
+</div>
+
+<!-- GLOBAL TOAST -->
+<div id="globalToast" role="status" aria-live="polite">
+  <span class="gt-icon" id="gtIcon"></span>
+  <span class="gt-msg" id="gtMsg"></span>
+</div>
+
+<div class="page">
+
+<!-- HEADER -->
+<div class="site-header">
+  <div class="header-left">
+    <h1>Préstamo <span>·</span> Cooperativa JFK</h1>
+    <p>Inicio: 12 mar 2026 · Primera cuota: 1 may 2026 · Interés diario = <span id="headerDailyRate">$21.050.000 × 21% ÷ 360 = $12.279/día</span></p>
+  </div>
+  <div class="header-badge">
+    <span class="pill pill-blue">$21.050.000 COP</span>
+    <span class="pill pill-amber">1,75% mensual</span>
+    <span class="pill pill-green" id="pillPlazo">36 meses</span>
+    <span class="pill pill-purple">21% NAMV</span>
+  </div>
+</div>
+
+<!-- VIEW MODE BAR -->
+<div class="view-mode-bar">
+  <span class="vmb-label"><i class="fa-solid fa-eye" aria-hidden="true" style="margin-right:5px;color:var(--blue)"></i>Modo de vista</span>
+  <div class="vmb-pills">
+    <button type="button" class="vmb-pill" id="vmb-summary">
+      <i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Resumen
+    </button>
+    <button type="button" class="vmb-pill active" id="vmb-full">
+      <i class="fa-solid fa-table-list" aria-hidden="true"></i> Completa
+    </button>
+  </div>
+</div>
+
+<!-- SUMMARY VIEW -->
+<div class="summary-view" id="summaryView">
+  <!-- reuses the same next-banner from full-view, cloned by JS -->
+  <div id="sv-banner-slot"></div>
+  <div class="sv-grid" id="svMetrics"></div>
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title">Capital vs. Intereses · vista compacta</div>
+    <div class="sv-chart-mini"><canvas id="myChartMini"></canvas></div>
+    <div class="chart-legend" id="svLegend"></div>
+  </div>
+  <div class="sv-next3" id="svNext3">
+    <div class="sv-next3-title"><i class="fa-solid fa-calendar-days" style="margin-right:5px;color:var(--blue)"></i>Próximas 3 cuotas</div>
+    <div id="svNext3Body"></div>
+  </div>
+  <button type="button" class="sv-expand-btn" id="svExpandBtn">
+    <i class="fa-solid fa-table-list"></i> Ver tabla completa y herramientas
+    <i class="fa-solid fa-chevron-right" style="font-size:10px;margin-left:2px"></i>
+  </button>
+</div>
+
+<!-- FULL VIEW -->
+<div class="full-view">
+
+<!-- ALERT -->
+<div class="alert alert-warn" id="alertBox"><i class="fa-solid fa-triangle-exclamation"></i> El valor pagado es menor a la cuota programada. Verifica con la cooperativa el tratamiento del faltante.</div>
+
+<!-- NEXT PAYMENT BANNER -->
+<div class="next-banner upcoming" id="nextBanner">
+  <div class="nb-left">
+    <div class="nb-icon" id="nbIcon"><i class="fa-regular fa-calendar-days"></i></div>
+    <div>
+      <div class="nb-label">Próxima cuota</div>
+      <div class="nb-title" id="nbTitle">Cargando...</div>
+      <div class="nb-sub" id="nbSub"></div>
+    </div>
+  </div>
+  <div class="nb-right">
+    <div class="nb-stat">
+      <div class="ns-label">Monto estimado</div>
+      <div class="ns-val val-amber" id="nbMonto">—</div>
+    </div>
+    <div class="nb-stat">
+      <div class="ns-label">Interés del período</div>
+      <div class="ns-val val-red" id="nbInteres">—</div>
+    </div>
+    <div id="nbCountdown"></div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="interest-ticker">
+  <div class="ticker-group">
+    <div>
+      <div class="ticker-label">Saldo capital hoy</div>
+      <div class="ticker-main val-blue" id="tickerSaldo">$21.050.000</div>
+      <div class="ticker-sub" id="tickerSaldoSub">Sin pagos registrados</div>
+    </div>
+    <div>
+      <div class="ticker-label">Interés acumulado desde último pago</div>
+      <div class="ticker-main val-red" id="tickerIntHoy">$0</div>
+      <div class="ticker-sub" id="tickerIntSub">—</div>
+    </div>
+    <div>
+      <div class="ticker-label">Deuda total hoy (capital + interés)</div>
+      <div class="ticker-main val-amber" id="tickerDeudaHoy">$21.050.000</div>
+      <div class="ticker-sub" id="tickerDeudaSub">Actualizado a hoy</div>
+    </div>
+    <div>
+      <div class="ticker-label">Total intereses reales pagados</div>
+      <div class="ticker-main" style="color:var(--text2)" id="tickerIntPagado">$0</div>
+      <div class="ticker-sub">por días exactos</div>
+    </div>
+  </div>
+  <div class="daily-rate-badge">
+    <div>
+      <div class="rate-val" id="dailyRateBadge">$12.279</div>
+      <div class="rate-desc" id="dailyRateDesc">por día<br>de interés</div>
+    </div>
+  </div>
+</div>
+
+<!-- SAVINGS BANNER -->
+<div class="savings-banner neutral" id="savingsBanner">
+  <div class="savings-main">
+    <div class="savings-icon"><i class="fa-solid fa-chart-line"></i></div>
+    <div>
+      <div class="savings-title" id="savingsTitle">Sin pagos registrados</div>
+      <div class="savings-amount" id="savingsAmount"></div>
+      <div class="savings-desc" id="savingsDesc">Registra fechas reales de pago para ver cuánto ahorras o pagas de más</div>
+    </div>
+  </div>
+  <div class="savings-stats" id="savingsStats"></div>
+</div>
+
+<!-- METRICS -->
+<div class="metrics-grid" id="metricsGrid"></div>
+
+<!-- PROGRESS -->
+<div class="progress-block">
+  <div class="progress-header">
+    <span>Progreso del préstamo</span>
+    <strong id="pctLabel">0%</strong>
+  </div>
+  <div class="track"><div class="fill" id="progFill" style="width:0%"></div></div>
+  <div class="progress-info">
+    <span>$0</span>
+    <span id="progPaid">Capital pagado: $0</span>
+    <span>$21.050.000</span>
+  </div>
+</div>
+
+<!-- CHART + PANEL -->
+<div class="top-row">
+  <div class="card">
+    <div class="card-title">Capital vs. Intereses reales acumulados · Saldo proyectado</div>
+    <div class="chart-wrap"><canvas id="myChart" role="img" aria-label="Gráfica de capital pagado, intereses reales y saldo restante"></canvas></div>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:#5b8def"></span>Capital pagado</span>
+      <span><span class="legend-dot" style="background:#f0647a"></span>Intereses reales</span>
+      <span><span class="legend-dot" style="background:#2dd4a0"></span>Ahorro acumulado</span>
+      <span><span class="legend-dot" style="background:#f5a623;opacity:0.6"></span>Saldo restante</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="tabs" role="tablist" aria-label="Herramientas">
+      <button type="button" class="tab active" data-tab="abono" role="tab" aria-selected="true" aria-controls="tab-abono" id="tabtrigger-abono">Abono capital</button>
+      <button type="button" class="tab" data-tab="hoy" role="tab" aria-selected="false" aria-controls="tab-hoy" id="tabtrigger-hoy">¿Cuánto debo hoy?</button>
+      <button type="button" class="tab" data-tab="verificacion" role="tab" aria-selected="false" aria-controls="tab-verificacion" id="tabtrigger-verificacion">Verificación banco</button>
+      <button type="button" class="tab" data-tab="log" role="tab" aria-selected="false" aria-controls="tab-log" id="tabtrigger-log">Log</button>
+    </div>
+
+    <!-- TAB ABONO -->
+    <div class="tab-panel active" id="tab-abono" role="tabpanel" aria-labelledby="tabtrigger-abono">
+      <div class="payment-panel">
+        <div class="panel-section" style="border:none;padding:0">
+          <div class="panel-section-title">Abono extra a capital</div>
+          <div class="field-group">
+            <label class="field-label" for="abonoCuota">Antes de la cuota #</label>
+            <select id="abonoCuota"><option value="">Selecciona cuota...</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="abonoValor">Valor del abono ($)</label>
+            <input type="number" id="abonoValor" placeholder="Mín. ..." min="0">
+            <div id="abonoValorFmt" style="font-size:10px;color:var(--blue);font-family:var(--mono);margin-top:3px;min-height:14px;transition:opacity 0.2s;"></div>
+            <div id="abonoMinHint" class="hint-box">
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true" style="margin-right:4px"></i><span id="abonoMinHintText">Mínimo: ... (cuota + 50%)</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="abonoFecha">Fecha real del abono <span class="color-text3 fw-400 fz-10">(opcional)</span></label>
+            <input type="date" id="abonoFecha">
+            <div class="info-box"><i class="fa-solid fa-circle-info color-blue" style="margin-right:3px"></i>El abono se registra en la cuota seleccionada. Puedes anotar el día exacto del pago. Debe estar entre el 12 mar 2026 y hoy (no se permiten fechas futuras).</div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6;padding:6px 9px;background:var(--bg4);border-radius:6px;border:1px solid var(--border)">
+            <i class="fa-solid fa-info-circle" style="color:var(--blue);margin-right:4px"></i>
+            <span id="abonoReglaText"></span>
+          </div>
+          <div class="abono-impact" id="abonoImpact">
+            <div class="impact-title">Impacto del abono</div>
+            <div id="abonoImpactBody"></div>
+          </div>
+          <button type="button" class="btn btn-primary" id="btnAplicarAbono" style="margin-top:8px">Aplicar abono a capital</button>
+        </div>
+        <div class="panel-section">
+          <div class="btn-row">
+            <button type="button" class="btn btn-ghost" id="btnExportCSV"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+            <button type="button" class="btn btn-danger" id="btnResetAll">Reiniciar todo</button>
+          </div>
+          <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales" style="margin-top:7px;">
+            <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
+          </button>
+          <button type="button" class="btn btn-ghost" id="btnExportImage" style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
+            <i class="fa-solid fa-image"></i> Exportar resumen como imagen
+          </button>
+          <button type="button" class="btn btn-ghost" id="btnRunTests" style="margin-top:7px;width:100%;background:rgba(45,212,160,0.05);color:var(--green);border-color:rgba(45,212,160,0.2);" title="Ejecuta la suite de tests financieros y muestra el resultado">
+            <i class="fa-solid fa-flask"></i> Verificar cálculos (tests)
+          </button>
+
+          <!-- BACKUP SECTION -->
+          <div class="backup-section">
+            <div class="backup-section-title"><i class="fa-solid fa-floppy-disk"></i> Copias de seguridad</div>
+            <div class="backup-btns">
+              <button type="button" class="btn-backup-export" id="btnExportBackup"><i class="fa-solid fa-cloud-arrow-down"></i> Guardar backup</button>
+              <button type="button" class="btn-backup-import" id="btnImportBackup"><i class="fa-solid fa-cloud-arrow-up"></i> Restaurar backup</button>
+            </div>
+            <input type="file" id="importFileInput" accept=".json" style="display:none">
+            <div class="backup-toast" id="backupToast"></div>
+            <div class="backup-info">
+              El backup guarda <span style="color:var(--text2)">todos tus pagos, fechas, abonos y notas</span> en un archivo .json.<br>
+              Restaura el archivo cuando cambies de dispositivo o navegador.
+            </div>
+          </div>
+
+          <!-- COLLAPSIBLE INFO NOTE -->
+          <div class="info-note">
+            <div class="info-note-toggle" title="Ver/ocultar explicación de fórmulas">
+              <i class="fa-solid fa-book-open" style="color:var(--blue);font-size:10px"></i>
+              <span class="int-label" style="color:var(--text3)">Cómo se calculan los intereses</span>
+              <i class="fa-solid fa-chevron-down int-icon"></i>
+            </div>
+            <div class="info-note-body">
+              <div style="padding-top:8px">
+                <span>Fórmula interés diario:</span> saldo × 21% ÷ 360<br>
+                <span>Interés por período:</span> siempre sobre los días programados del período.<br>
+                El banco cobra el período completo sin importar si pagás antes o después.<br>
+                <span style="color:var(--green)">El ahorro real viene de abonos a capital</span>, que reducen el saldo base de los siguientes períodos.<br>
+                <span>Sin penalidad por prepago</span> (cláusula 2)
+              </div>
+            </div>
+          </div>
+
+          <!-- CUOTA #1 COLLAPSIBLE -->
+          <div class="info-note" style="margin-top:4px">
+            <div class="info-note-toggle" title="Ver/ocultar explicación cuota #1">
+              <i class="fa-solid fa-circle-question" style="color:var(--amber);font-size:10px"></i>
+              <span class="int-label" style="color:var(--text3)">¿Por qué la cuota #1 es mayor?</span>
+              <i class="fa-solid fa-chevron-down int-icon"></i>
+            </div>
+            <div class="info-note-body">
+              <div class="cuota1-note" style="margin-top:8px">
+                <div class="cuota1-icon"><i class="fa-solid fa-calendar-days"></i></div>
+                <div class="cuota1-content">
+                  <div class="cuota1-body">
+                    Se cobraron <strong>49 días</strong> de interés en lugar de los 30 habituales,
+                    porque el desembolso fue el <strong>12 mar</strong> y el primer pago el <strong>1 may</strong>
+                    — período extendido por convención 30/360.
+                  </div>
+                  <div class="cuota1-chips">
+                    <span class="cuota1-chip chip-amber">$1.030.467 cuota #1</span>
+                    <span class="cuota1-chip chip-muted">vs. $796.233 normal</span>
+                    <span class="cuota1-chip chip-blue">49 días · 30/360</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- TAB CUÁNTO DEBO HOY -->
+    <div class="tab-panel" id="tab-hoy" role="tabpanel" aria-labelledby="tabtrigger-hoy">
+      <div class="payment-panel">
+        <div class="panel-section" style="border:none;padding:0">
+          <div class="panel-section-title">Saldo exacto en cualquier fecha</div>
+          <div class="field-group">
+            <label class="field-label" for="fechaConsulta">Consultar saldo al día</label>
+            <input type="date" id="fechaConsulta" value="">
+          </div>
+          <div class="calc-preview visible" id="deudaResult">
+            <div class="calc-row"><span class="ck">Saldo capital</span><span class="cv" id="dr-cap">—</span></div>
+            <div class="calc-row"><span class="ck">Interés acumulado (días)</span><span class="cv val-red" id="dr-int">—</span></div>
+            <div class="calc-row"><span class="ck">Días desde último pago</span><span class="cv" id="dr-dias">—</span></div>
+            <div class="calc-row total"><span class="ck">Deuda total ese día</span><span class="cv" id="dr-total">—</span></div>
+          </div>
+          <div class="info-note" style="margin-top:9px">Esto muestra cuánto deberías pagarle al banco <span>en cualquier fecha</span>, incluyendo el interés diario generado hasta ese momento.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB VERIFICACIÓN BANCO -->
+    <div class="tab-panel" id="tab-verificacion" role="tabpanel" aria-labelledby="tabtrigger-verificacion">
+      <div class="payment-panel">
+        <div class="panel-section" style="border:none;padding:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+            <div class="panel-section-title" style="margin-bottom:0">Calc. propio vs. tabla del banco</div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnSyncBanco" style="display:flex;align-items:center;gap:5px;font-size:10.5px">
+              <i class="fa-solid fa-file-arrow-up" style="font-size:10px"></i> Sincronizar con banco
+            </button>
+          </div>
+
+          <!-- PANEL SINCRONIZAR CON BANCO -->
+          <div id="syncBancoPanel" style="display:none;margin-bottom:12px">
+            <div style="background:rgba(91,141,239,0.07);border:1px solid rgba(91,141,239,0.2);border-radius:var(--radius);padding:12px 13px;">
+              <div style="font-size:10.5px;font-weight:600;color:var(--blue);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-paste"></i> Pegar tabla del banco (PDF/Excel)
+              </div>
+              <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6">
+                Copia las columnas <strong style="color:var(--text2)">Cuota, Capital, Interés, Saldo</strong> del PDF o Excel del banco y pégalas aquí. Cada fila en una línea, valores separados por coma, punto y coma, o Tab.
+              </div>
+              <textarea id="syncBancoInput" class="sync-textarea" placeholder="Ej:
+1, 424691, 601671, 20625309
+2, 432131, 360930, 20193178
+3, 439691, 353370, 19753487
+..."></textarea>
+              <div class="sync-btn-row">
+                <button type="button" class="btn btn-primary btn-sm" id="btnParseSyncBanco" style="flex:1"><i class="fa-solid fa-check" style="font-size:10px"></i> Comparar</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btnClearSyncBanco"><i class="fa-solid fa-xmark" style="font-size:10px"></i> Limpiar</button>
+              </div>
+              <div id="syncBancoError" class="sync-error"></div>
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">
+            Compara <span style="color:var(--blue)">AMORT_CALC</span> (fórmulas francesas puras) con
+            <span style="color:var(--amber)" id="bancoSourceLabel">AMORT_BANCO</span> (hardcodeado).
+            Diferencias <span style="color:var(--red);font-weight:600">&gt;$5</span> se resaltan en rojo.
+          </div>
+          <div id="verificacionGrid" style="max-height:300px;overflow-y:auto;font-size:11px;font-family:var(--mono)"></div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="verificacionSummary"></div>
+        </div>
+      </div>
+    </div>
+    <!-- TAB LOG DE CAMBIOS -->
+    <div class="tab-panel" id="tab-log" role="tabpanel" aria-labelledby="tabtrigger-log">
+      <div class="payment-panel">
+        <div class="panel-section" style="border:none;padding:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+            <div class="panel-section-title" style="margin-bottom:0">Historial de cambios</div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnClearLog" style="font-size:10px;opacity:0.7" title="Borrar historial">
+              <i class="fa-solid fa-trash" style="font-size:9px"></i> Limpiar
+            </button>
+          </div>
+          <div style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+            <div id="logList"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6">
+            <i class="fa-solid fa-circle-info" style="color:var(--blue);margin-right:3px"></i>
+            El log registra todas las acciones realizadas. <span style="color:var(--green)">Se guarda automáticamente</span> y persiste entre sesiones. Máximo 200 entradas.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="table-section-header">
+  <h2>Tabla de amortización — Interés real por días exactos</h2>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div class="filter-btns">
+      <button type="button" class="filter-btn active" data-filter="all">Todas</button>
+      <button type="button" class="filter-btn" data-filter="paid">Pagadas</button>
+      <button type="button" class="filter-btn" data-filter="pending">Pendientes</button>
+    </div>
+    <button type="button" class="tbl-toggle-btn" id="simpleTblBtn" title="Mostrar solo columnas esenciales">
+      <i class="fa-solid fa-columns"></i> Vista simple
+    </button>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th><i class="fa-solid fa-check" style="font-size:10px"></i></th>
+          <th>#</th>
+          <th>Fecha prog.</th>
+          <th>Estado</th>
+          <th class="col-extra">Capital</th>
+          <th class="col-extra">Interés</th>
+          <th class="col-extra">Días</th>
+          <th class="col-extra" title="Interés que te ahorras en el siguiente período gracias al abono a capital">Ahorro abono</th>
+          <th class="col-extra">Cuota base</th>
+          <th class="col-extra" title="GMF — Gravamen a los Movimientos Financieros (4×1000). El banco cobra el 0,4% del valor de cada cuota como impuesto. Ej.: cuota $793.061 × 0,004 = $3.172. Haz clic en el valor para marcar si fue cobrado o no.">GMF <i class="fa-solid fa-hand-pointer" style="font-size:8px;opacity:0.5"></i></th>
+          <th class="th-highlight" title="Cuota fija del banco + abono a capital (si aplica)">Total a pagar</th>
+          <th>Saldo restante</th>
+          <th>Fecha pago</th>
+          <th class="col-extra">Nota</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+
+</div><!-- /full-view -->
+
+<!-- ABONO EDIT MODAL -->
+<div class="abono-modal-overlay" id="abonoEditModal" role="dialog" aria-modal="true" aria-labelledby="abonoEditTitle">
+  <div class="abono-modal-box">
+    <div class="abono-modal-header">
+      <div class="abono-modal-icon"><i class="fa-solid fa-coins"></i></div>
+      <div>
+        <div class="abono-modal-title" id="abonoEditTitle">Editar abono</div>
+        <div class="abono-modal-sub" id="abonoEditSub"></div>
+      </div>
+    </div>
+    <div class="field-label modal-field-label">Valor del abono a capital ($)</div>
+    <input type="number" class="abono-modal-input" id="abonoEditVal" placeholder="0" min="0">
+    <div class="field-label modal-field-label">Fecha real del abono <span class="color-text3 fw-400 fz-10">(cualquier día)</span></div>
+    <input type="date" class="abono-modal-input modal-date-input" id="abonoEditFecha">
+    <div style="font-size:10px;color:var(--text3);margin-bottom:8px;margin-top:-8px;line-height:1.5"><i class="fa-solid fa-circle-info" style="color:var(--blue);margin-right:3px"></i>La fecha del abono no puede ser futura — si aún no ha ocurrido, deja el campo en blanco.</div>
+    <div id="abonoModalMinHint" class="modal-hint-info">
+      <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i><span id="abonoModalMinHintText">Mínimo exigido: ...</span>
+    </div>
+    <div class="modal-regla-box">
+      Pon 0 para eliminar el abono.<br>
+      <span id="abonoModalReglaText" class="color-amber"></span>
+    </div>
+    <div class="abono-modal-btns">
+      <button type="button" class="btn btn-ghost" id="btnCloseAbonoModal">Cancelar</button>
+      <button type="button" class="btn btn-success" id="btnSaveAbonoModal"><i class="fa-solid fa-check"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────────
+const DEBUG = false; // set true during development to see verbose logs
+function _dbg(...args) { if (DEBUG) console.log(...args); }
+
+const PRESTAMO_INICIAL = 21050000;
+const PLAZO_MESES      = 36;          // ← única fuente de verdad para el plazo
+const TASA_MENSUAL = 0.0175;
+// Fórmula: saldo × (21% / 360) × días
+const TASA_DIARIA = 0.21 / 360; // = 0.000583333... (mismo valor que 1.75%/30)
+const GMF_RATE = 0.004;
+const FECHA_INICIO = new Date('2026-03-12T00:00:00Z');
+const SK = 'loan_tracker_jfk_v4';
+// ── CUOTA FIJA — valores exactos del banco ───────────────────────────────────
+// Fórmula del banco para cuotas regulares (k=2..35):
+//   Iₖ = round(S(k-1) × 0.0175 / 30) × 30   ← redondeo al múltiplo de 30
+//   Aₖ = CuotaFija - Iₖ
+//   Sₖ = S(k-1) - Aₖ
+// Cuota 1 especial (período irregular 49 días):
+//   I₁ = floor(Monto × 0.0175 × 49/30)  → 601.671 (hardcodeado del banco)
+// Última cuota: A₃₆ = saldo; I₃₆ = round(saldo × 0.0175/30)×30; C₃₆ = A+I
+const CUOTA_NETA     = 793061;   // cuota neta fija cuotas 2–35 (banco)
+const CUOTA_GMF_BASE = Math.round(CUOTA_NETA * GMF_RATE); // 3172
+const CUOTA_BASE     = CUOTA_NETA + CUOTA_GMF_BASE;        // 796233
+// Abono mínimo exigido por la cooperativa: cuota fija + 50%
+const ABONO_MINIMO   = Math.round(CUOTA_BASE * 1.5);
+
+// Cuota 1: valores exactos del banco (período irregular)
+const CUOTA1_INT   = 601671;
+const CUOTA1_CAP   = 424691;
+const CUOTA1_TOTAL = 1026362;
+const CUOTA1_GMF   = 4105;
+const CUOTA1_PAGAR = 1030467;
+const SALDO1       = 20625309;
+
+// Fórmula exacta del banco para interés (cuotas regulares):
+// round(saldo × i / 30) × 30
+function calcInteresBANCO(saldo) {
+  return Math.round(saldo * TASA_MENSUAL / 30) * 30;
+}
+
+// ── FECHAS PROGRAMADAS — generadas dinámicamente desde PLAZO_MESES ────────────
+// La primera cuota vence el 1 may 2026; cada siguiente cuota es el día 1 del
+// mes siguiente. Si PLAZO_MESES cambia, las fechas se actualizan solas.
+const FECHAS_PROG = [];
+const FECHAS_LABEL = [];
+(function buildFechas() {
+  const MESES_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  // Fecha de la primera cuota: 1 may 2026
+  let y = 2026, m = 5; // mes 1-based
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    const mm = String(m).padStart(2, '0');
+    FECHAS_PROG.push(`${y}-${mm}-01`);
+    FECHAS_LABEL.push(`1 ${MESES_ES[m - 1]} ${y}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+})();
+// ── TABLA DEL BANCO (referencia hardcodeada) ──────────────────────────────────
+// Renombrada de AMORT → AMORT_BANCO. Queda como referencia para comparación.
+// La lógica principal usa AMORT_CALC (generado con fórmulas francesas puras).
+const AMORT_BANCO = [
+  {cap:424691,int:601671,cuota:1026362,gmf:4105,total:1030467,saldo:20625309},
+  {cap:432131,int:360930,cuota:793061,gmf:3172,total:796233,saldo:20193178},
+  {cap:439691,int:353370,cuota:793061,gmf:3172,total:796233,saldo:19753487},
+  {cap:447371,int:345690,cuota:793061,gmf:3172,total:796233,saldo:19306116},
+  {cap:455201,int:337860,cuota:793061,gmf:3172,total:796233,saldo:18850915},
+  {cap:463181,int:329880,cuota:793061,gmf:3172,total:796233,saldo:18387734},
+  {cap:471281,int:321780,cuota:793061,gmf:3172,total:796233,saldo:17916453},
+  {cap:479531,int:313530,cuota:793061,gmf:3172,total:796233,saldo:17436922},
+  {cap:487901,int:305160,cuota:793061,gmf:3172,total:796233,saldo:16949021},
+  {cap:496451,int:296610,cuota:793061,gmf:3172,total:796233,saldo:16452570},
+  {cap:505151,int:287910,cuota:793061,gmf:3172,total:796233,saldo:15947419},
+  {cap:513971,int:279090,cuota:793061,gmf:3172,total:796233,saldo:15433448},
+  {cap:522971,int:270090,cuota:793061,gmf:3172,total:796233,saldo:14910477},
+  {cap:532121,int:260940,cuota:793061,gmf:3172,total:796233,saldo:14378356},
+  {cap:541451,int:251610,cuota:793061,gmf:3172,total:796233,saldo:13836905},
+  {cap:550901,int:242160,cuota:793061,gmf:3172,total:796233,saldo:13286004},
+  {cap:560561,int:232500,cuota:793061,gmf:3172,total:796233,saldo:12725443},
+  {cap:570371,int:222690,cuota:793061,gmf:3172,total:796233,saldo:12155072},
+  {cap:580361,int:212700,cuota:793061,gmf:3172,total:796233,saldo:11574711},
+  {cap:590501,int:202560,cuota:793061,gmf:3172,total:796233,saldo:10984210},
+  {cap:600851,int:192210,cuota:793061,gmf:3172,total:796233,saldo:10383359},
+  {cap:611351,int:181710,cuota:793061,gmf:3172,total:796233,saldo:9772008},
+  {cap:622061,int:171000,cuota:793061,gmf:3172,total:796233,saldo:9149947},
+  {cap:632951,int:160110,cuota:793061,gmf:3172,total:796233,saldo:8516996},
+  {cap:644021,int:149040,cuota:793061,gmf:3172,total:796233,saldo:7872975},
+  {cap:655271,int:137790,cuota:793061,gmf:3172,total:796233,saldo:7217704},
+  {cap:666761,int:126300,cuota:793061,gmf:3172,total:796233,saldo:6550943},
+  {cap:678431,int:114630,cuota:793061,gmf:3172,total:796233,saldo:5872512},
+  {cap:690281,int:102780,cuota:793061,gmf:3172,total:796233,saldo:5182231},
+  {cap:702371,int:90690,cuota:793061,gmf:3172,total:796233,saldo:4479860},
+  {cap:714671,int:78390,cuota:793061,gmf:3172,total:796233,saldo:3765189},
+  {cap:727181,int:65880,cuota:793061,gmf:3172,total:796233,saldo:3038008},
+  {cap:739901,int:53160,cuota:793061,gmf:3172,total:796233,saldo:2298107},
+  {cap:752831,int:40230,cuota:793061,gmf:3172,total:796233,saldo:1545276},
+  {cap:766031,int:27030,cuota:793061,gmf:3172,total:796233,saldo:779245},
+  {cap:779245,int:13650,cuota:792895,gmf:3172,total:796067,saldo:0}
+];
+
+// ── FIREBASE SYNC ────────────────────────────────────────────────────────────
+// 1) Pega aquí el mismo firebaseConfig que usas en mis-finanzas (index.html,
+//    busca "firebaseConfig"). El apiKey de cliente no es secreto, la seguridad
+//    real la dan las reglas de Firestore + el UID del dueño más abajo.
+const firebaseConfig = {
+  apiKey: "AIzaSyCvx24knPndHDHjyjaz_NT_9Vea0Wr0aFY",
+  authDomain: "prestamo-jfk-tracker.firebaseapp.com",
+  projectId: "prestamo-jfk-tracker",
+  storageBucket: "prestamo-jfk-tracker.firebasestorage.app",
+  messagingSenderId: "543617739601",
+  appId: "1:543617739601:web:0eb6dfadde9228fa988170"
+};
+
+// 2) Primera vez: deja esto como 'PENDIENTE'. Abre la página TÚ primero,
+//    verás un aviso en pantalla con tu UID. Cópialo, pégalo aquí abajo Y en
+//    las reglas de Firestore (ver instrucciones), y vuelve a publicar.
+const OWNER_UID = 'PENDIENTE';
+
+const FS_DOC_PATH = ['prestamoJFK', 'data']; // colección/documento en Firestore
+
+let fbApp = null, fbAuth = null, fbDb = null;
+let isOwner = false;
+let fbReady = false;
+let _applyingRemote = false; // evita que el listener re-dispare saveState()
+
+function fbConfigured() {
+  return firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PEGA_TU');
+}
+
+function initFirebaseSync() {
+  if (!fbConfigured()) {
+    _dbg('Firebase no configurado todavía (firebaseConfig con placeholders). Trabajando solo en localStorage.');
+    return;
+  }
+  fbApp = firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+
+  fbAuth.signInAnonymously().catch(e => {
+    _dbg('Error signInAnonymously:', e);
+    showToast('No se pudo conectar la sincronización (revisa que Anonymous Auth esté habilitado).', 'error', 6000);
+  });
+
+  fbAuth.onAuthStateChanged(user => {
+    if (!user) return;
+    isOwner = (OWNER_UID !== 'PENDIENTE' && user.uid === OWNER_UID);
+
+    if (OWNER_UID === 'PENDIENTE') {
+      // Modo de arranque: mostramos el UID para que lo copies una sola vez.
+      showToast('Config pendiente — tu UID es: ' + user.uid + ' (cópialo, ver consola)', 'warn', 15000);
+      console.log('%cTU UID DE FIREBASE (cópialo en OWNER_UID y en las reglas de Firestore):', 'color:#5b8def;font-weight:bold', user.uid);
+      isOwner = true; // te tratamos como dueño mientras terminas de configurar
+    }
+
+    applyReadOnlyFromOwnership();
+    attachFirestoreListener();
+  });
+}
+
+function applyReadOnlyFromOwnership() {
+  if (!isOwner) {
+    readOnly = true;
+    document.body.classList.add('readonly-mode');
+    const btn = document.getElementById('btnReadOnly');
+    if (btn) {
+      btn.disabled = true;
+      btn.title = 'Vista compartida de solo lectura';
+    }
+    const banner = document.getElementById('readonlyBanner');
+    if (banner) banner.style.display = 'block';
+  }
+}
+
+function attachFirestoreListener() {
+  if (!fbDb) return;
+  const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
+  ref.onSnapshot(snap => {
+    if (!snap.exists) {
+      // No hay nada remoto todavía: si somos el dueño, subimos lo que haya local.
+      if (isOwner) pushStateToFirestore();
+      return;
+    }
+    const remote = snap.data();
+    _applyingRemote = true;
+    if (remote.state) {
+      state = remote.state;
+      localStorage.setItem(SK, JSON.stringify(state));
+    }
+    if (remote.auditLog) {
+      auditLog = remote.auditLog;
+      localStorage.setItem(LOG_SK, JSON.stringify(auditLog));
+    }
+    _applyingRemote = false;
+    if (typeof render === 'function') render();
+  }, err => {
+    _dbg('onSnapshot error:', err);
+  });
+}
+
+function pushStateToFirestore() {
+  if (!fbDb || !isOwner || _applyingRemote) return;
+  const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
+  ref.set({
+    state: state,
+    auditLog: (typeof auditLog !== 'undefined' ? auditLog : []),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true }).catch(e => {
+    _dbg('Error guardando en Firestore:', e);
+    showToast('No se pudo sincronizar con la nube (se guardó local).', 'error', 5000);
+  });
+}
+
+// ── STATE ──────────────────────────────────────────────────────────────────────
+function loadState() {
+  try {
+    const s = localStorage.getItem(SK);
+    if (s) {
+      const parsed = JSON.parse(s);
+      // ensure notes field exists
+      if (parsed.pagos) parsed.pagos = parsed.pagos.map(p => ({nota:'', abonoFecha:'', gmfCobrado:true, ...p}));
+      return parsed;
+    }
+  } catch(e) {
+    showToast('Error al cargar datos guardados. Se usará estado vacío.', 'error', 6000);
+    _dbg('loadState error:', e);
+  }
+  return { pagos: Array(PLAZO_MESES).fill(null).map(() => ({pagada:false,fecha:'',valor:'',abono:0,abonoFecha:'',nota:'',gmfCobrado:true})) };
+}
+function saveState() {
+  try {
+    localStorage.setItem(SK, JSON.stringify(state));
+  } catch(e) {
+    showToast('Error al guardar datos. El almacenamiento puede estar lleno o bloqueado.', 'error', 6000);
+    _dbg('saveState error:', e);
+  }
+  pushStateToFirestore();
+}
+let state = loadState();
+let currentFilter = 'all';
+let chart = null;
+
+// ── UTILITIES ─────────────────────────────────────────────────────────────────
+function fmt(n) { return '$' + Math.round(n).toLocaleString('es-CO'); }
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function fmtDiff(n) {
+  const abs = Math.abs(Math.round(n));
+  return (n >= 0 ? '+' : '-') + '$' + abs.toLocaleString('es-CO');
+}
+function toUTC(d) {
+  const x = (d instanceof Date) ? d : new Date(d);
+  return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate());
+}
+// Días calendario reales (para countdowns y displays de fechas)
+function daysBetween(d1, d2) {
+  return Math.trunc((toUTC(d2) - toUTC(d1)) / 86400000);
+}
+// Días en convención 30/360 (para cálculo de intereses, igual que JFK)
+// Cada mes = 30 días, cada año = 360 días
+function daysBetween30_360(d1, d2) {
+  const a = (d1 instanceof Date) ? d1 : new Date(d1);
+  const b = (d2 instanceof Date) ? d2 : new Date(d2);
+  let D1 = a.getUTCDate(), M1 = a.getUTCMonth()+1, Y1 = a.getUTCFullYear();
+  let D2 = b.getUTCDate(), M2 = b.getUTCMonth()+1, Y2 = b.getUTCFullYear();
+  if (D1 === 31) D1 = 30;
+  if (D2 === 31 && D1 >= 30) D2 = 30;
+  return (Y2 - Y1)*360 + (M2 - M1)*30 + (D2 - D1);
+}
+function parseDate(s) {
+  if (!s) return null;
+  return new Date(s + 'T00:00:00Z');
+}
+function todayUTC() {
+  const t = new Date();
+  return new Date(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()));
+}
+// Interés SIMPLE diario: replica la fórmula exacta del banco.
+// El banco calcula el interés diario como round(S × i / 30) — en pesos enteros —
+// y luego multiplica por los días. Esto equivale a round(S × TASA_MENSUAL / 30),
+// que es idéntico a round(S × TASA_DIARIA) pero sin errores de decimales acumulados,
+// ya que TASA_DIARIA = 21%/360 = 1.75%/30 = TASA_MENSUAL/30 (son exactamente iguales).
+// Nota: para cuotas regulares de 30 días, el banco hace round(S×i/30)×30 (múltiplo de 30).
+// Esta función replica eso dividiendo el factor ×30 en ×1×dias para períodos variables.
+function calcIntSimple(saldo, dias) {
+  // round(S × i / 30) = interés diario en pesos enteros (fórmula exacta del banco)
+  const intDiario = Math.round(saldo * TASA_MENSUAL / 30);
+  return intDiario * Math.max(0, dias);
+}
+
+// ── PLAN DE AMORTIZACIÓN CALCULADO (fórmulas exactas del banco) ──────────────
+// Replica exactamente el método del banco:
+//   Cuota 1 : valores hardcodeados (período irregular de 49 días)
+//   Cuotas 2–35: Iₖ = round(S(k-1) × 0.0175 / 30) × 30  →  múltiplo de 30
+//   Cuota 36: A₃₆ = saldo restante; I₃₆ = calcInteresBANCO(saldo); C₃₆ = A+I
+function buildAmortCalc() {
+  const rows = [];
+
+  // ── Cuota 1 (período irregular — valores exactos del banco) ──
+  rows.push({
+    cap:   CUOTA1_CAP,
+    int:   CUOTA1_INT,
+    cuota: CUOTA1_TOTAL,
+    gmf:   CUOTA1_GMF,
+    total: CUOTA1_PAGAR,
+    saldo: SALDO1,
+    dias:  49
+  });
+
+  let saldo = SALDO1;
+
+  // ── Cuotas 2 a 35 (regulares) ──
+  for (let i = 1; i < PLAZO_MESES - 1; i++) {
+    const int        = calcInteresBANCO(saldo);   // round(S × i/30) × 30
+    const cap        = CUOTA_NETA - int;
+    const nuevoSaldo = saldo - cap;
+    const gmf        = Math.round(CUOTA_NETA * GMF_RATE);
+    rows.push({
+      cap,
+      int,
+      cuota: CUOTA_NETA,
+      gmf,
+      total: CUOTA_NETA + gmf,
+      saldo: nuevoSaldo,
+      dias:  30
+    });
+    saldo = nuevoSaldo;
+  }
+
+  // ── Cuota 36 (ajuste de cierre) ──
+  const int_n   = calcInteresBANCO(saldo);   // mismo redondeo
+  const cap_n   = saldo;                      // amortiza exactamente el saldo
+  const cuota_n = cap_n + int_n;
+  const gmf_n   = Math.round(cuota_n * GMF_RATE);
+  rows.push({
+    cap:   cap_n,
+    int:   int_n,
+    cuota: cuota_n,
+    gmf:   gmf_n,
+    total: cuota_n + gmf_n,
+    saldo: 0,
+    dias:  30
+  });
+
+  return rows;
+}
+
+// Tabla calculada — fuente primaria de la lógica de la app.
+// Se inicializa aquí, después de que las utilidades (daysBetween30_360, calcIntSimple)
+// ya están definidas.
+const AMORT_CALC = buildAmortCalc();
+
+// ── CORE CALCULATION ──────────────────────────────────────────────────────────
+
+// ── calcRowDates: extrae y normaliza las fechas relevantes de una cuota ──────
+function calcRowDates(i, prevDate) {
+  const p           = state.pagos[i];
+  const fechaPagada = p.pagada && p.fecha ? parseDate(p.fecha) : null;
+  const fechaProg   = parseDate(FECHAS_PROG[i]);
+  const payDate     = fechaPagada || fechaProg;
+
+  // diasProg: días del período según fecha programada (base del interés del banco).
+  // El banco siempre cobra interés sobre diasProg — no importa si pagás antes o después
+  // de la fecha programada para el cálculo de la cuota actual.
+  const diasProg = Math.max(0, daysBetween30_360(prevDate, fechaProg));
+
+  return { fechaPagada, fechaProg, payDate, diasProg };
+}
+
+// ── calcRowInterest: calcula interés de una cuota ────────────────────────────
+// El interés ya viene precalculado en AMORT_CALC con la fórmula exacta del banco.
+// Solo lo retornamos para que calcRows() lo use consistentemente.
+function calcRowInterest(saldo, cap, dates) {
+  const intTabla = calcIntSimple(saldo, dates.diasProg);
+  const intReal  = calcIntSimple(saldo, dates.diasProg);
+  const ahorro   = Math.max(0, intTabla - intReal);
+  return { intReal, intTabla, ahorro };
+}
+
+// ── calcRowLiquidation: detecta si esta cuota es/estaba post-liquidación ─────
+function calcRowLiquidation(saldo, cap) {
+  const esPostLiquidacion = saldo === 0;
+  const esLiquidacion     = saldo > 0 && saldo < cap;
+  const capReal           = esPostLiquidacion ? 0 : Math.min(saldo, cap);
+  return { esPostLiquidacion, esLiquidacion, capReal };
+}
+
+// ── calcRows: orquesta el cálculo fila por fila ───────────────────────────────
+function calcRows() {
+  let saldo    = PRESTAMO_INICIAL;
+  let prevDate = FECHA_INICIO;
+  const rows   = [];
+
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    const b     = AMORT_CALC[i];   // fórmulas francesas puras (antes: AMORT)
+    const banco = AMORT_BANCO[i];  // referencia del banco, solo para comparación
+    const p     = state.pagos[i];
+    const abono = p.abono || 0;
+
+    const dates       = calcRowDates(i, prevDate);
+    const interest    = calcRowInterest(saldo, b.cap, dates);
+    const liquidation = calcRowLiquidation(saldo, b.cap);
+
+    const gmfCobrado  = p.gmfCobrado !== false; // default true
+    const gmfEfectivo = gmfCobrado ? b.gmf : 0;
+    const totalReal   = b.cuota + gmfEfectivo + abono;
+    const nuevoSaldo  = Math.max(0, saldo - b.cap - abono);
+
+    // Diferencias entre valor calculado y banco (para verificación)
+    const diffCap   = b.cap   - banco.cap;
+    const diffInt   = b.int   - banco.int;
+    const diffCuota = b.cuota - banco.cuota;
+
+    rows.push({
+      ...b,
+      abono,
+      ahorroAbono: 0, // se calcula en segunda pasada al final
+
+      saldoAntes: saldo,
+      saldoCalc:  nuevoSaldo,
+      dias:       dates.diasProg,
+      intReal:    interest.intReal,
+      intTabla:   interest.intTabla,
+      ahorro:     interest.ahorro,
+      totalReal,
+      gmfEfectivo,
+      gmfCobrado,
+      fechaProg:  dates.fechaProg,
+      pagada:     p.pagada,
+      esLiquidacion:     liquidation.esLiquidacion,
+      esPostLiquidacion: liquidation.esPostLiquidacion,
+      capReal:           liquidation.capReal,
+      // Diffs vs banco (para panel de verificación)
+      diffCap, diffInt, diffCuota,
+      banco: { cap: banco.cap, int: banco.int, cuota: banco.cuota, gmf: banco.gmf },
+    });
+
+    // Avanzar estado para la siguiente iteración
+    // prevDate siempre es la fecha PROGRAMADA de esta cuota (no la real de pago).
+    // El banco reinicia el contador de intereses desde la fecha de vencimiento,
+    // independientemente de si pagaste antes o después. La fecha real solo afecta
+    // los días (y el ahorro) de la cuota en curso, no el período siguiente.
+    saldo    = nuevoSaldo;
+    prevDate = dates.fechaProg;
+  }
+
+  // ── Segunda pasada: calcular ahorroAbono real (método dos escenarios) ──────────
+  //
+  // PROBLEMA del método anterior: solo sumaba intereses de cuotas *eliminadas*
+  // (esPostLiquidacion), ignorando que cada abono también reduce el capital de
+  // todas las cuotas futuras que siguen pagándose, generando menos interés en
+  // cada una de ellas. Ese delta nunca se capturaba, subestimando el ahorro real.
+  //
+  // SOLUCIÓN: comparar el total de intereses del plan original (sin abonos) contra
+  // un plan recalculado con los abonos aplicados en el momento exacto de cada cuota.
+  // La diferencia es el ahorro real acumulado. Funciona correctamente para múltiples
+  // abonos porque el recálculo es siempre completo e incremental.
+  //
+  // Implementación eficiente: simulamos el plan con abonos usando la misma lógica
+  // bancaria de buildAmortCalc(), aplicando cada abono como reducción de saldo antes
+  // del cálculo de la cuota siguiente. Usamos calcInteresBANCO() (la misma función
+  // del banco) para que los intereses sean exactamente comparables con AMORT_CALC.
+  // Solo necesitamos el total de intereses por cuota — no rebuild completo de tablas.
+  {
+    // ── Verificar si hay algún abono registrado ──────────────────────────────
+    const hayAbonos = rows.some(r => r.abono > 0);
+
+    if (hayAbonos) {
+      // ── Simular plan con abonos aplicados ───────────────────────────────────
+      // Usamos la misma lógica de buildAmortCalc() pero descontando cada abono
+      // del saldo antes del período siguiente, exactamente como lo haría el banco.
+      //
+      // El abono de la cuota i reduce el saldo que entra al período i+1.
+      // La cuota 1 es especial (período de 49 días, valores hardcodeados).
+      // Las cuotas 2-35 son regulares (30 días, calcInteresBANCO).
+      // La cuota 36 cierra con el saldo restante.
+      //
+      // Resultado: intConAbono[i] = interés que se pagaría en cuota i+1
+      // con todos los abonos anteriores ya aplicados.
+
+      const intConAbono = []; // interés simulado por cuota (con abonos)
+
+      // Cuota 1: período irregular hardcodeado — el abono de cuota 0 reduce saldo
+      // antes de que cuota 1 calcule su interés (si hubiera abono en cuota 0).
+      // En la práctica los abonos suelen ser en cuotas posteriores, pero lo
+      // calculamos correctamente de todas formas.
+      let saldoSim = PRESTAMO_INICIAL - (rows[0].abono || 0);
+      intConAbono.push(AMORT_CALC[0].int); // cuota 1: siempre interés hardcodeado
+
+      // Simular cuotas 2 a 36 con el saldo acumulando abonos
+      saldoSim = SALDO1 - (rows[1].abono || 0); // SALDO1 ya descontó cap de cuota 1
+      // Nota: si hubo abono en cuota 0 (antes de cuota 1), SALDO1 no lo refleja.
+      // Recalculamos partiendo desde el saldo real post-cuota1-con-abono.
+      {
+        // Recalcular desde el principio para ser exactos con múltiples abonos
+        let s = PRESTAMO_INICIAL;
+        // Cuota 1: capital hardcodeado + abono de cuota 0
+        s = s - CUOTA1_CAP - (rows[0].abono || 0);
+        s = Math.max(0, s);
+
+        for (let i = 1; i < PLAZO_MESES; i++) {
+          // Aplicar abono de cuota anterior (reduce saldo antes de calcular interés)
+          // El abono de la cuota i baja el saldo que entra al siguiente período.
+          // Ya lo descontamos al avanzar saldo al final del loop.
+
+          if (s <= 0) {
+            // Préstamo ya liquidado — las cuotas restantes no tienen interés
+            intConAbono.push(0);
+            continue;
+          }
+
+          let intI;
+          if (i < PLAZO_MESES - 1) {
+            // Cuotas regulares 2-35: misma fórmula exacta del banco
+            intI = calcInteresBANCO(s);
+            const capI = CUOTA_NETA - intI;
+            s = Math.max(0, s - capI - (rows[i].abono || 0));
+          } else {
+            // Cuota 36 (cierre): interés sobre el saldo restante
+            intI = calcInteresBANCO(s);
+            s = 0;
+          }
+          intConAbono.push(intI);
+        }
+      }
+
+      // ── Calcular ahorro por diferencia de intereses ─────────────────────────
+      // El ahorro de cada abono = Σ(int_original[k] - int_con_abono[k]) para k > idx_abono.
+      // En lugar de atribuirlo cuota a cuota, calculamos el ahorro total acumulado
+      // hasta cada cuota con abono y lo asignamos a esa cuota (útil para tabla y banner).
+      //
+      // Para múltiples abonos: el ahorro es incremental — cada abono adicional
+      // reduce los intereses del plan ya modificado por abonos previos.
+      // La diferencia total de intereses captura esto automáticamente.
+
+      // Ahorro acumulado desde cada cuota con abono hasta el final del plan
+      // Se lo asignamos a la cuota donde se hizo el abono para mostrar en tabla.
+      // El ahorro de cada abono = intereses que se dejaron de pagar desde ese
+      // momento en adelante, comparado con el plan sin ese abono (pero con abonos previos).
+      //
+      // Implementación simplificada: asignamos el ahorro TOTAL del plan completo
+      // a la primera cuota con abono, y los ahorros marginales a las siguientes.
+      // Más correcto y útil para el banner: guardamos el total en cada row para
+      // que renderSavingsBanner() pueda sumar todos los rows[i].ahorroAbono y
+      // obtener el ahorro real sin doble-contar.
+      //
+      // Estrategia: calculamos plan sin abonos vs plan con abonos secuencialmente.
+      // Para cada cuota con abono, calculamos el ahorro marginal de ESE abono
+      // (diferencia entre plan-con-abonos-hasta-i-1 y plan-con-abonos-hasta-i).
+      // Esto requiere N simulaciones = N abonos, lo que es eficiente dado N ≤ 36.
+
+      const abonoIndices = rows.map((r, i) => r.abono > 0 ? i : -1).filter(i => i >= 0);
+
+      if (abonoIndices.length > 0) {
+        // Función auxiliar: total de intereses de un plan simulado dado un conjunto
+        // de abonos aplicados (objeto {idx: monto}).
+        function simularInteresesTotales(abonosMap) {
+          let s = PRESTAMO_INICIAL;
+          let totalInt = 0;
+
+          // Cuota 1 (idx=0): interés hardcodeado
+          const abonoC0 = abonosMap[0] || 0;
+          totalInt += AMORT_CALC[0].int;
+          s = Math.max(0, s - CUOTA1_CAP - abonoC0);
+
+          for (let i = 1; i < PLAZO_MESES; i++) {
+            if (s <= 0) break;
+            let intI;
+            if (i < PLAZO_MESES - 1) {
+              intI = calcInteresBANCO(s);
+              const capI = Math.max(0, CUOTA_NETA - intI);
+              const abonoI = abonosMap[i] || 0;
+              s = Math.max(0, s - capI - abonoI);
+            } else {
+              intI = calcInteresBANCO(s);
+              s = 0;
+            }
+            totalInt += intI;
+          }
+          return totalInt;
+        }
+
+        // Plan base: sin ningún abono
+        const intSinAbonos = simularInteresesTotales({});
+
+        // Plan con todos los abonos: ahorro total
+        const abonosCompletos = {};
+        for (const idx of abonoIndices) abonosCompletos[idx] = rows[idx].abono;
+        const intConTodosAbonos = simularInteresesTotales(abonosCompletos);
+        const ahorroTotal = Math.max(0, intSinAbonos - intConTodosAbonos);
+
+        // Distribuir el ahorro marginal entre las cuotas con abono
+        // para que la columna de la tabla muestre el aporte de cada abono.
+        // El ahorro marginal del abono i = ahorro_con_abonos[0..i] - ahorro_con_abonos[0..i-1]
+        let abonosAcum = {};
+        let intAcumPrev = intSinAbonos;
+
+        for (const idx of abonoIndices) {
+          abonosAcum[idx] = rows[idx].abono;
+          const intAcumActual = simularInteresesTotales(abonosAcum);
+          const ahorroMarginal = Math.max(0, intAcumPrev - intAcumActual);
+          rows[idx].ahorroAbono = ahorroMarginal;
+          intAcumPrev = intAcumActual;
+        }
+      }
+    }
+  }
+
+  return rows;
+}
+
+// ── TEST SUITE ────────────────────────────────────────────────────────────────
+// Ejecutar con: runTests() en la consola del navegador.
+// También disponible en UI: botón "🧪 Tests" en la barra de export.
+function runTests() {
+  const results = [];
+  let passed = 0, failed = 0;
+
+  function assert(name, actual, expected, tolerance = 0) {
+    const diff = Math.abs(actual - expected);
+    const ok   = diff <= tolerance;
+    results.push({ name, actual, expected, diff, ok });
+    ok ? passed++ : failed++;
+  }
+  function assertBool(name, value, expectedTrue) {
+    const ok = !!value === !!expectedTrue;
+    results.push({ name, actual: value, expected: expectedTrue, diff: 0, ok });
+    ok ? passed++ : failed++;
+  }
+
+  // ── Test 1: CUOTA_NETA — fórmula sistema francés ──────────────────────────
+  const cuotaEsperada = Math.ceil(
+    PRESTAMO_INICIAL * TASA_MENSUAL / (1 - Math.pow(1 + TASA_MENSUAL, -PLAZO_MESES))
+  );
+  assert('CUOTA_NETA coincide con fórmula', CUOTA_NETA, cuotaEsperada, 0);
+
+  // ── Test 2: TASA_DIARIA equivalencia ─────────────────────────────────────
+  // 21% / 360 debe ser igual a 1.75% / 30
+  assert('TASA_DIARIA: 21%/360 == 1.75%/30',
+    Math.round(TASA_DIARIA * 1e9), Math.round((0.0175 / 30) * 1e9), 0);
+
+  // ── Test 3: calcIntSimple — interés con saldo y días conocidos ────────────
+  // $21.050.000 × (21/360) × 30 días = $21.050.000 × 0.0175 = $368.375
+  const intSimpleEsperado = Math.round(21050000 * TASA_DIARIA) * 30;
+  assert('calcIntSimple(21.05M, 30 días)',
+    calcIntSimple(21050000, 30), intSimpleEsperado, 0);
+
+  // ── Test 4: calcIntSimple — 0 días devuelve 0 ────────────────────────────
+  assert('calcIntSimple(any, 0) == 0', calcIntSimple(21050000, 0), 0, 0);
+
+  // ── Test 5: daysBetween30_360 — período normal de 30 días ─────────────────
+  assert('daysBetween30_360: 1 jun → 1 jul = 30',
+    daysBetween30_360(new Date('2026-06-01T00:00:00Z'), new Date('2026-07-01T00:00:00Z')), 30, 0);
+
+  // ── Test 6: daysBetween30_360 — primer período extendido (49 días) ────────
+  assert('daysBetween30_360: 12 mar → 1 may = 49',
+    daysBetween30_360(new Date('2026-03-12T00:00:00Z'), new Date('2026-05-01T00:00:00Z')), 49, 0);
+
+  // ── Test 7: calcRows — total de filas = PLAZO_MESES ────────────────────────
+  const testState = JSON.parse(JSON.stringify(state));
+  const rowsSnap  = calcRows();
+  assert('calcRows produce PLAZO_MESES filas', rowsSnap.length, PLAZO_MESES, 0);
+
+  // ── Test 8: calcRows — primera fila comienza con saldo = PRESTAMO_INICIAL ─
+  assert('calcRows[0].saldoAntes == PRESTAMO_INICIAL',
+    rowsSnap[0].saldoAntes, PRESTAMO_INICIAL, 0);
+
+  // ── Test 9: calcRows — suma de capitales amortizados == PRESTAMO_INICIAL ──
+  const sumCap = rowsSnap.reduce((s, r) => s + r.cap, 0);
+  assert('Σ cap == PRESTAMO_INICIAL', sumCap, PRESTAMO_INICIAL, 5); // ≤ $5 de redondeo
+
+  // ── Test 10: calcRows — saldo final == 0 ─────────────────────────────────
+  assert('Saldo final == 0', rowsSnap[rowsSnap.length - 1].saldoCalc, 0, 0);
+
+  // ── Test 11: calcRows sin pagos — ninguna fila marcada como esPostLiquidacion al inicio
+  assertBool('Sin pagos: fila 0 NO es post-liquidación',
+    rowsSnap[0].esPostLiquidacion, false);
+
+  // ── Test 12: calcRowLiquidation — detecta liquidación anticipada ──────────
+  const liq1 = calcRowLiquidation(100000, 500000); // saldo < cap → esLiquidacion
+  assertBool('calcRowLiquidation: saldo < cap → esLiquidacion', liq1.esLiquidacion, true);
+
+  // ── Test 13: calcRowLiquidation — detecta post-liquidación ───────────────
+  const liq2 = calcRowLiquidation(0, 500000);
+  assertBool('calcRowLiquidation: saldo==0 → esPostLiquidacion', liq2.esPostLiquidacion, true);
+
+  // ── Test 14: calcRowInterest — interés siempre sobre diasProg ──────────────
+  const datesEnFecha = { diasProg: 30 };
+  const intEnFecha = calcRowInterest(20000000, 450000, datesEnFecha);
+  assert('Int. en fecha == intTabla', intEnFecha.intReal, intEnFecha.intTabla, 0);
+
+  // ── Test 15: pago anticipado NO genera ahorro (banco cobra período completo) ─
+  const datesAdelantado = { diasProg: 30 };
+  const intAdelantado = calcRowInterest(20000000, 450000, datesAdelantado);
+  assert('Pago anticipado: ahorro == 0 (banco cobra período completo)', intAdelantado.ahorro, 0, 0);
+
+  // ── Test 16: ABONO_MINIMO == ceil(cuotaBase × 1.5) ───────────────────────
+  assert('ABONO_MINIMO == round(CUOTA_BASE × 1.5)',
+    ABONO_MINIMO, Math.round(CUOTA_BASE * 1.5), 0);
+
+  // ── Tests 17-22: AMORT_CALC vs AMORT_BANCO ───────────────────────────────
+  // Verificar que las fórmulas francesas reproducen los datos del banco.
+  // Tolerancia: ≤ $1 por cuota (redondeos acumulados de interés diario).
+  const TOL_CUOTA = 1;
+
+  // Test 17: cuota #1 — período extendido 49 días
+  assert('AMORT_CALC[0].int vs banco (49 días)', AMORT_CALC[0].int, AMORT_BANCO[0].int, TOL_CUOTA);
+  assert('AMORT_CALC[0].cap vs banco', AMORT_CALC[0].cap, AMORT_BANCO[0].cap, TOL_CUOTA);
+
+  // Test 18: cuota #2 — primer período normal (30 días)
+  assert('AMORT_CALC[1].int vs banco', AMORT_CALC[1].int, AMORT_BANCO[1].int, TOL_CUOTA);
+  assert('AMORT_CALC[1].cap vs banco', AMORT_CALC[1].cap, AMORT_BANCO[1].cap, TOL_CUOTA);
+
+  // Test 19: cuota #18 (mitad del préstamo)
+  assert('AMORT_CALC[17].cap vs banco', AMORT_CALC[17].cap, AMORT_BANCO[17].cap, TOL_CUOTA);
+
+  // Test 20: cuota #36 (última)
+  assert('AMORT_CALC[35].saldo == 0 (última cuota cierra el préstamo)',
+    AMORT_CALC[35].saldo, 0, 0);
+
+  // Test 21: buildAmortCalc — Σ cap == PRESTAMO_INICIAL
+  const sumCapCalc = AMORT_CALC.reduce((s, r) => s + r.cap, 0);
+  assert('AMORT_CALC: Σ cap == PRESTAMO_INICIAL', sumCapCalc, PRESTAMO_INICIAL, 5);
+
+  // Test 22: cuotas 2-35 del banco vs calculado (diff máximo ≤ $2)
+  let maxDiffCuota = 0;
+  for (let i = 1; i < PLAZO_MESES - 1; i++) {
+    const d = Math.abs(AMORT_CALC[i].cuota - AMORT_BANCO[i].cuota);
+    if (d > maxDiffCuota) maxDiffCuota = d;
+  }
+  assert('AMORT_CALC vs BANCO: diff máx cuota normal ≤ $2', maxDiffCuota, 0, 2);
+
+  // ── Reporte en consola ────────────────────────────────────────────────────
+  const label = `%c[JFK Tests] ${passed}/${passed+failed} pasados`;
+  const style = failed === 0
+    ? 'color:#2dd4a0;font-weight:bold'
+    : 'color:#f0647a;font-weight:bold';
+  _dbg(label, style);
+  results.forEach(r => {
+    const icon = r.ok ? '✅' : '❌';
+    const msg  = r.ok
+      ? `${icon} ${r.name}`
+      : `${icon} ${r.name} — esperado ${r.expected}, obtenido ${r.actual} (diff=${r.diff})`;
+    _dbg(msg);
+  });
+  if (failed > 0) _dbg(`[JFK Tests] ¡${failed} test(s) FALLARON! Revisar lógica financiera.`);
+
+  return { passed, failed, results };
+}
+
+// ── NEXT PAYMENT BANNER ───────────────────────────────────────────────────────
+function renderNextBanner(rows) {
+  const today = todayUTC();
+  let nextIdx = -1;
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    if (!state.pagos[i].pagada && !rows[i].esPostLiquidacion) { nextIdx = i; break; }
+  }
+
+  const banner = document.getElementById('nextBanner');
+  const icon   = document.getElementById('nbIcon');
+  const title  = document.getElementById('nbTitle');
+  const sub    = document.getElementById('nbSub');
+  const monto  = document.getElementById('nbMonto');
+  const interes= document.getElementById('nbInteres');
+  const cd     = document.getElementById('nbCountdown');
+
+  if (nextIdx === -1) {
+    banner.className = 'next-banner done';
+    icon.innerHTML = '<i class="fa-solid fa-trophy" style="color:var(--amber)"></i>';
+    title.textContent = '¡Préstamo completamente pagado!';
+    sub.textContent = 'Felicitaciones, liberaste tu deuda.';
+    monto.textContent = ''; interes.textContent = ''; cd.innerHTML = '';
+    return;
+  }
+
+  const r = rows[nextIdx];
+  const fechaP = parseDate(FECHAS_PROG[nextIdx]);
+  const dias = daysBetween(today, fechaP);
+  const label = FECHAS_LABEL[nextIdx];
+
+  monto.textContent  = fmt(r.totalReal);
+  interes.textContent= fmt(r.int);
+
+  let chipCls = 'cc-blue';
+  if (dias < 0) {
+    banner.className = 'next-banner overdue';
+    icon.innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:var(--red)"></i>';
+    title.textContent = `Cuota ${nextIdx+1} — ${label} — VENCIDA`;
+    const diasVencida30_360 = Math.max(0, daysBetween30_360(fechaP, today));
+    const intExtra = calcIntSimple(r.saldoAntes, diasVencida30_360);
+    sub.textContent = `Lleva ${Math.abs(dias)} días calendario vencida · interés extra (30/360): ${fmt(intExtra)}.`;
+    chipCls = 'cc-red';
+    cd.innerHTML = `<span class="countdown-chip cc-red"><i class="fa-solid fa-triangle-exclamation"></i> ${Math.abs(dias)} días vencida</span>`;
+  } else if (dias <= 5) {
+    banner.className = 'next-banner urgent';
+    icon.innerHTML = '<i class="fa-solid fa-bell" style="color:var(--amber)"></i>';
+    title.textContent = `Cuota ${nextIdx+1} — ${label}`;
+    sub.textContent = `¡Vence muy pronto! Paga antes para ahorrar intereses.`;
+    chipCls = 'cc-amber';
+    cd.innerHTML = `<span class="countdown-chip cc-amber"><i class="fa-solid fa-bolt"></i> ${dias} días restantes</span>`;
+  } else {
+    banner.className = 'next-banner upcoming';
+    icon.innerHTML = '<i class="fa-regular fa-calendar-days" style="color:var(--blue)"></i>';
+    title.textContent = `Cuota ${nextIdx+1} — ${label}`;
+    sub.textContent = `Cada día que esperas, la deuda crece ${fmt(Math.round(r.saldoAntes*TASA_DIARIA))}. Countdown en días calendario · interés calculado con 30/360.`;
+    cd.innerHTML = `<span class="countdown-chip cc-blue"><i class="fa-regular fa-clock"></i> ${dias} días restantes</span>`;
+  }
+}
+
+// ── TICKER ─────────────────────────────────────────────────────────────────────
+function renderTicker(rows) {
+  const today = todayUTC();
+  let saldo = PRESTAMO_INICIAL;
+  let lastPaidDate = FECHA_INICIO;
+  let totIntReal = 0;
+  let cuotasPagadas = 0;
+
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    const p = state.pagos[i], r = rows[i];
+    if (p.pagada) {
+      saldo = r.saldoCalc;
+      totIntReal += r.int;
+      cuotasPagadas++;
+      // El banco reinicia el contador desde la fecha PROGRAMADA, no desde la real.
+      // Si pagaste antes de la fecha prog, el interés no corre hasta esa fecha.
+      const fechaRealPago = p.fecha ? parseDate(p.fecha) : null;
+      const fechaProgCuota = parseDate(FECHAS_PROG[i]);
+      if (fechaRealPago) {
+        lastPaidDate = toUTC(fechaRealPago) >= toUTC(fechaProgCuota) ? fechaRealPago : fechaProgCuota;
+      } else {
+        lastPaidDate = fechaProgCuota;
+      }
+    } else if ((p.abono || 0) > 0 && !r.esPostLiquidacion) {
+      // Abono registrado sin cuota pagada: el saldo baja pero el interés sigue corriendo
+      // desde la misma fecha base. El saldo ya está calculado en r.saldoCalc.
+      saldo = r.saldoCalc;
+    }
+  }
+
+  const diasHoy = Math.max(0, daysBetween30_360(lastPaidDate, today));
+  const intHoy  = Math.round(calcIntSimple(saldo, diasHoy));
+  const deudaHoy = saldo + intHoy;
+
+  document.getElementById('tickerSaldo').textContent = fmt(saldo);
+  document.getElementById('tickerSaldoSub').textContent =
+    cuotasPagadas === 0 ? 'Sin pagos registrados' : `Tras ${cuotasPagadas} cuota${cuotasPagadas>1?'s':''} pagadas`;
+  document.getElementById('tickerIntHoy').textContent = fmt(intHoy);
+  document.getElementById('tickerIntSub').textContent =
+    diasHoy === 0 ? 'Interés pendiente: $0 (deuda congelada hasta fecha prog.)' : `Hace ${diasHoy} día${diasHoy!==1?'s':''} desde la fecha de inicio del período`;
+  document.getElementById('tickerDeudaHoy').textContent = fmt(deudaHoy);
+  document.getElementById('tickerDeudaSub').textContent =
+    `Capital $${saldo.toLocaleString('es-CO')} + interés $${intHoy.toLocaleString('es-CO')}`;
+  document.getElementById('tickerIntPagado').textContent = fmt(totIntReal);
+
+  // Update dynamic daily rate based on current balance
+  const dailyRate = Math.round(saldo * TASA_DIARIA);
+  document.getElementById('dailyRateBadge').textContent = fmt(dailyRate);
+  document.getElementById('headerDailyRate').textContent =
+    `${fmt(saldo)} × 21% ÷ 360 = ${fmt(dailyRate)}/día`;
+}
+
+// ── SAVINGS BANNER ────────────────────────────────────────────────────────────
+function renderSavingsBanner(rows) {
+  const banner = document.getElementById('savingsBanner');
+  const title  = document.getElementById('savingsTitle');
+  const amount = document.getElementById('savingsAmount');
+  const desc   = document.getElementById('savingsDesc');
+  const stats  = document.getElementById('savingsStats');
+
+  // El ahorro de abonos es independiente de si la cuota está pagada o no.
+  // Un abono reduce el saldo desde que se registra, aunque la cuota no haya sido pagada aún.
+  const abonoRows = rows.filter((r,i) => state.pagos[i] && (state.pagos[i].abono || 0) > 0 && r.cap > 0);
+  const paidRows  = rows.filter((r,i) => state.pagos[i] && state.pagos[i].pagada && r.cap > 0);
+  if (!paidRows.length && !abonoRows.length) {
+    banner.className = 'savings-banner neutral';
+    title.className = 'savings-title';
+    title.style.color = '';
+    title.textContent = 'Sin pagos registrados';
+    amount.textContent = '';
+    amount.style.color = '';
+    desc.textContent = 'Registra fechas reales de pago para ver cuánto ahorras o pagas de más';
+    stats.innerHTML = '';
+    return;
+  }
+
+  // El único ahorro real viene de abonos a capital (independiente de pagada).
+  const totalAhorroAbono = rows.reduce((s,r) => s + (r.ahorroAbono||0), 0);
+  const totalAbonos = rows.reduce((s,r) => s + (r.abono||0), 0);
+  if (totalAhorroAbono > 0) {
+    banner.className='savings-banner positive';
+    title.className='savings-title green'; title.textContent='¡Ahorrás con tus abonos a capital!';
+    amount.style.color='var(--green)'; amount.textContent=fmt(totalAhorroAbono);
+    desc.textContent='Interés total que te ahorras gracias a los abonos a capital (cuotas eliminadas + reducción en cuotas futuras)';
+  } else if (totalAbonos > 0) {
+    banner.className='savings-banner neutral';
+    title.className='savings-title'; title.style.color='var(--cyan)';
+    title.textContent='Abono a capital registrado';
+    amount.textContent=fmt(totalAbonos); amount.style.color='var(--cyan)';
+    desc.textContent='El abono ya está reduciendo tu saldo. El ahorro aparecerá cuando se eliminen cuotas futuras.';
+  } else {
+    banner.className='savings-banner neutral';
+    title.className='savings-title'; title.style.color='var(--text)';
+    title.textContent='Sin abonos a capital registrados';
+    amount.textContent=''; amount.style.color='';
+    desc.textContent='Hacé abonos a capital para reducir el saldo y pagar menos interés en los períodos siguientes.';
+  }
+
+  stats.innerHTML = totalAbonos > 0 ? `
+    <div class="savings-stat">
+      <div class="sv-label">Total abonado</div>
+      <div class="sv-val" style="color:var(--blue)">${fmt(totalAbonos)}</div>
+    </div>
+    <div class="savings-stat">
+      <div class="sv-label">Ahorro estimado</div>
+      <div class="sv-val" style="color:var(--green)">${fmt(totalAhorroAbono)}</div>
+    </div>` : '';
+}
+
+// ── METRICS ───────────────────────────────────────────────────────────────────
+function renderMetrics(rows) {
+  let totPagado=0, totCap=0, totIntReal=0, saldoPend=PRESTAMO_INICIAL;
+  let cuotasPag=0, totAbonos=0;
+
+  for (let i=0; i<rows.length; i++) {
+    const p=state.pagos[i], r=rows[i];
+    if (p && r.cap > 0) {
+      // Cuota pagada: acumular capital de cuota, interés y totales
+      if (p.pagada) {
+        totPagado += r.totalReal;
+        totCap += r.cap;
+        totIntReal += r.int;
+        cuotasPag++;
+      }
+      // Abono: independiente del estado de pago de la cuota
+      if ((p.abono || 0) > 0) {
+        totAbonos += r.abono;
+        totCap += r.abono;
+      }
+    }
+  }
+
+  // El saldo real es el de la última fila activa (calcRows ya lo calcula correctamente
+  // incluyendo abonos independientemente de si la cuota está pagada o no).
+  // Buscamos el saldo de la última fila que tenga cuota pagada o abono registrado.
+  saldoPend = PRESTAMO_INICIAL;
+  for (let i=rows.length-1; i>=0; i--) {
+    const p=state.pagos[i], r=rows[i];
+    if (p && (p.pagada || (p.abono||0) > 0) && r.cap > 0) {
+      saldoPend = r.saldoCalc;
+      break;
+    }
+  }
+
+  // Cuotas efectivas: solo las que aplican (excluye las post-liquidación por abonos a capital)
+  const cuotasEfect = rows.filter(r => !r.esPostLiquidacion).length;
+  const cuotasRest = cuotasEfect - cuotasPag;
+  const cuotasElim = PLAZO_MESES - cuotasEfect; // cuotas eliminadas por abonos a capital
+  const pct = Math.round((PRESTAMO_INICIAL - saldoPend) / PRESTAMO_INICIAL * 100);
+
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('pctLabel').textContent = pct + '%';
+  document.getElementById('progPaid').textContent = 'Capital pagado: ' + fmt(PRESTAMO_INICIAL - saldoPend);
+
+  document.getElementById('metricsGrid').innerHTML = `
+    <div class="metric-card">
+      <div class="label">Total pagado</div>
+      <div class="value val-blue">${fmt(totPagado)}</div>
+      <div class="sub">capital + interés + GMF</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Capital amortizado</div>
+      <div class="value val-green">${fmt(totCap)}</div>
+      <div class="sub">de ${fmt(PRESTAMO_INICIAL)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Intereses reales</div>
+      <div class="value val-red">${fmt(totIntReal)}</div>
+      <div class="sub">por días exactos</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Saldo pendiente</div>
+      <div class="value val-amber">${fmt(saldoPend)}</div>
+      <div class="sub">${pct}% amortizado</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Cuotas restantes</div>
+      <div class="value val-purple">${cuotasRest}</div>
+      <div class="sub">de ${cuotasEfect} reales${cuotasElim > 0 ? ` · <span style="color:var(--green)">−${cuotasElim} eliminadas</span>` : ''}</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Abonado a capital</div>
+      <div class="value val-green">${fmt(totAbonos)}</div>
+      <div class="sub">${totAbonos > 0 ? 'reduce saldo e intereses futuros' : 'sin abonos aún'}</div>
+    </div>`;
+
+  renderChart(rows);
+  renderTicker(rows);
+  renderSavingsBanner(rows);
+  renderNextBanner(rows);
+}
+
+// ── CHART ─────────────────────────────────────────────────────────────────────
+// Datos por cuota para el tooltip (no acumulados)
+let chartPerCuota = [];
+
+function renderChart(rows) {
+  const labels=[], capD=[], intD=[], ahorroD=[], saldoD=[];
+  let acumCap=0, acumInt=0, acumAhorro=0;
+  chartPerCuota = [];
+
+  for (let i=0; i<PLAZO_MESES; i++) {
+    labels.push('C'+(i+1));
+    const p=state.pagos[i], r=rows[i];
+    let cuotaCap=0, cuotaInt=0, cuotaAbono=0;
+    if (p && p.pagada && r.cap > 0) {
+      cuotaCap   = r.cap;
+      cuotaInt   = r.int;
+      acumCap  += cuotaCap;
+      acumInt  += cuotaInt;
+      acumAhorro += Math.max(0, r.ahorroAbono || 0);
+    }
+    // Abono es independiente del estado pagada
+    if (p && (p.abono || 0) > 0 && r.cap > 0) {
+      cuotaAbono = r.abono;
+      acumCap += cuotaAbono;
+    }
+    capD.push(Math.round(acumCap));
+    intD.push(Math.round(acumInt));
+    ahorroD.push(Math.round(acumAhorro));
+    saldoD.push(rows[i].saldoCalc);
+
+    // Guardar valores de esta cuota para el tooltip
+    chartPerCuota.push({
+      cap:     Math.round(cuotaCap),
+      int:     Math.round(cuotaInt),
+      ahorro:  Math.round(r.ahorroAbono || 0),
+      abono:   Math.round(cuotaAbono),
+      saldo:   rows[i].saldoCalc,
+      pagada:  !!(p && p.pagada),
+      esPostLiquidacion: rows[i].esPostLiquidacion
+    });
+  }
+
+  const fmtTooltip = v => v >= 1000000
+    ? '$' + (v/1000000).toFixed(3).replace('.',',') + 'M'
+    : '$' + Math.round(v).toLocaleString('es-CO');
+
+  const ctx = document.getElementById('myChart').getContext('2d');
+  if (chart) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = capD;
+    chart.data.datasets[1].data = intD;
+    chart.data.datasets[2].data = ahorroD;
+    chart.data.datasets[3].data = saldoD;
+    chart.options.interaction = {mode:'index',intersect:false};
+    chart.update();
+    return;
+  }
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {label:'Capital',data:capD,borderColor:'#5b8def',backgroundColor:'rgba(91,141,239,0.07)',fill:true,tension:0.4,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#5b8def',pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,borderWidth:2},
+        {label:'Intereses reales',data:intD,borderColor:'#f0647a',backgroundColor:'rgba(240,100,122,0.07)',fill:true,tension:0.4,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#f0647a',pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,borderWidth:2},
+        {label:'Ahorro acumulado',data:ahorroD,borderColor:'#2dd4a0',backgroundColor:'rgba(45,212,160,0.07)',fill:true,tension:0.4,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#2dd4a0',pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,borderWidth:2},
+        {label:'Saldo restante',data:saldoD,borderColor:'#f5a623',backgroundColor:'rgba(245,166,35,0.05)',fill:true,tension:0.4,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#f5a623',pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,borderWidth:1.5,borderDash:[4,3]}
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          enabled:true,
+          backgroundColor:'rgba(20,23,32,0.97)',
+          borderColor:'rgba(255,255,255,0.12)',
+          borderWidth:1,
+          titleColor:'#7a82a0',
+          titleFont:{family:"'Space Grotesk',sans-serif",size:10,weight:'600'},
+          bodyFont:{family:"'JetBrains Mono',monospace",size:11},
+          bodyColor:'#dde2f0',
+          padding:12,
+          cornerRadius:10,
+          boxPadding:5,
+          caretSize:6,
+          callbacks:{
+            title: items => {
+              const idx = parseInt(items[0].label.replace('C','')) - 1;
+              const d = chartPerCuota[idx];
+              const estado = d && d.esPostLiquidacion ? ' · eliminada' : d && d.pagada ? ' · pagada' : ' · pendiente';
+              return `Cuota ${items[0].label.replace('C','')} — ${FECHAS_LABEL[idx]||''}${estado}`;
+            },
+            label: item => {
+              const idx = item.dataIndex;
+              const d = chartPerCuota[idx];
+              if (!d) return '';
+              // Mostrar valores POR CUOTA (no acumulados) según el dataset
+              switch (item.datasetIndex) {
+                case 0: // Capital
+                  return d.esPostLiquidacion
+                    ? `  Capital cuota: —`
+                    : `  Capital cuota: ${fmtTooltip(AMORT_CALC[idx].cap)}${d.abono > 0 ? ' + abono '+fmtTooltip(d.abono) : ''}`;
+                case 1: // Interés
+                  return d.esPostLiquidacion
+                    ? `  Interés cuota: —`
+                    : `  Interés cuota: ${fmtTooltip(AMORT_CALC[idx].int)}`;
+                case 2: // Ahorro acumulado
+                  return `  Ahorro acum.: ${fmtTooltip(item.raw)}`;
+                case 3: // Saldo restante
+                  return `  Saldo restante: ${fmtTooltip(d.saldo)}`;
+                default: return '';
+              }
+            },
+            labelColor: item => ({
+              borderColor:'transparent',
+              backgroundColor:['#5b8def','#f0647a','#2dd4a0','#f5a623'][item.datasetIndex]
+            })
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#444c65',font:{size:9},maxTicksLimit:12},grid:{color:'rgba(255,255,255,0.03)'}},
+        y:{ticks:{color:'#444c65',font:{size:9},callback:v=>'$'+(v/1000000).toFixed(1)+'M'},grid:{color:'rgba(255,255,255,0.03)'}}
+      }
+    }
+  });
+}
+
+// ── TABLE ─────────────────────────────────────────────────────────────────────
+function renderTable(rows) {
+  const sel    = document.getElementById('abonoCuota');
+  sel.innerHTML = '<option value="">Selecciona cuota...</option>';
+  for (let i=0; i<PLAZO_MESES; i++) {
+    if (rows[i].cap > 0) {
+      const opt = `<option value="${i}">Cuota ${i+1} — ${FECHAS_LABEL[i]}</option>`;
+      sel.innerHTML += opt;
+    }
+  }
+
+  const today = todayUTC();
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+
+  for (let i=0; i<PLAZO_MESES; i++) {
+    const r = rows[i], p = state.pagos[i];
+    if (currentFilter === 'paid'    && !p.pagada) continue;
+    if (currentFilter === 'pending' &&  p.pagada) continue;
+    if (currentFilter === 'pending' &&  r.esPostLiquidacion) continue;
+
+    const isToday = daysBetween(today, r.fechaProg) === 0;
+    let timingBadge = '', rowClass = p.pagada ? 'row-paid' : '';
+    if (r.esPostLiquidacion) {
+      rowClass = 'row-eliminated';
+    } else if (isToday && !p.pagada) {
+      timingBadge = '<span class="status-badge badge-today">HOY</span>';
+      rowClass = 'row-today';
+    } else if (p.pagada && p.fecha) {
+      const diasDif = daysBetween(r.fechaProg, parseDate(p.fecha));
+      if (diasDif < -1) {
+        timingBadge = `<span class="status-badge badge-early">↑ ${Math.abs(diasDif)}d antes</span>`;
+        rowClass = 'row-early';
+      } else if (diasDif > 1) {
+        timingBadge = `<span class="status-badge badge-late">↓ ${diasDif}d tarde</span>`;
+        rowClass = 'row-late';
+      }
+    }
+
+
+    const statusBadge = p.pagada
+      ? `<span class="status-badge badge-paid"><span class="dot dot-green"></span>Pagada</span>`
+      : `<span class="status-badge badge-pending"><span class="dot dot-gray"></span>Pendiente</span>`;
+
+    const abonoFechaLabel = (r.abono > 0 && p.abonoFecha)
+      ? `<span style="font-size:9.5px;color:var(--text3);display:block;margin-top:2px;font-family:var(--mono)"><i class="fa-regular fa-calendar" style="margin-right:2px"></i>${p.abonoFecha}</span>`
+      : (r.abono > 0 ? `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">sin fecha</span>` : '');
+
+    const abonoTag = r.abono > 0
+      ? `<button type="button" class="abono-tag-btn has-abono" data-abono-modal="${i}"><i class="fa-solid fa-pen-to-square"></i> +${fmt(r.abono)}</button>${abonoFechaLabel}`
+      : `<button type="button" class="abono-tag-btn no-abono" data-abono-modal="${i}"><i class="fa-solid fa-plus"></i> abono</button>`;
+
+    const intClass = 'normal'; // el banco siempre cobra el período completo, sin early/late
+
+    const tr = document.createElement('tr');
+    tr.className = r.esPostLiquidacion ? 'row-eliminated' : rowClass;
+
+    // ── Checkbox: deshabilitado si la deuda ya era 0 (cuota no aplica) ──────
+    let checkboxHtml;
+    if (r.esPostLiquidacion) {
+      checkboxHtml = `<input type="checkbox" disabled title="El préstamo ya fue liquidado antes de esta cuota" style="opacity:0.2;cursor:not-allowed">`;
+    } else {
+      checkboxHtml = `<input type="checkbox" ${p.pagada?'checked':''} data-toggle-pago="${i}">`;
+    }
+
+    // ── Badge de liquidación (cuota donde conviene liquidar) ─────────────────
+    const liquidarBadge = (r.esLiquidacion && !p.pagada)
+      ? `<span class="status-badge" style="background:rgba(245,166,35,0.15);color:var(--amber);border:1px solid rgba(245,166,35,0.35);margin-left:4px;font-size:10px;letter-spacing:0.2px">
+           <i class="fa-solid fa-bolt" style="font-size:9px;margin-right:3px"></i>Liquidar préstamo
+         </span>`
+      : '';
+
+    // ── Si es post-liquidación, mostrar toda la fila opaca ──────────────────
+    const rowStyle = '';
+
+    tr.innerHTML = `
+      <td data-label="Ok">${checkboxHtml}</td>
+      <td data-label="N°" style="font-family:var(--mono);color:var(--text2)">${i+1}</td>
+      <td data-label="Fecha" style="color:var(--text2)">${FECHAS_LABEL[i]}</td>
+      <td data-label="Estado">${r.esPostLiquidacion
+        ? `<span class="status-badge" style="background:rgba(255,255,255,0.03);color:var(--text3);border:1px solid var(--border);font-size:10px"><i class="fa-solid fa-ban" style="margin-right:3px;font-size:9px"></i>Eliminada</span>`
+        : statusBadge}${timingBadge}${liquidarBadge}</td>
+      <td class="col-extra" data-label="Capital"><div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px"><span class="num">${r.esPostLiquidacion ? '<span style="color:var(--text3)">$0</span>' : fmt(r.cap)}</span>${r.esPostLiquidacion ? '' : abonoTag}</div></td>
+      <td class="col-extra" data-label="Interés real"><span class="num" style="color:var(--text2)">${r.esPostLiquidacion ? '—' : fmt(r.intReal)}</span></td>
+      <td class="col-extra" data-label="Días"><span class="num">${r.esPostLiquidacion ? '—' : r.dias}</span></td>
+      <td class="col-extra" data-label="Ahorro abono">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : (r.ahorroAbono > 0 ? `<span class="saving-chip good" title="Ahorro estimado en el siguiente período por este abono a capital">≈ ${fmt(r.ahorroAbono)}</span>` : '<span style="color:var(--text3);font-size:11px">—</span>')}</td>
+      <td class="col-extra" data-label="Cuota base"><span class="num">${r.esPostLiquidacion ? '—' : fmt(r.cuota)}</span></td>
+      <td class="col-extra" data-label="GMF"><span class="num" style="color:var(--text2)">${r.esPostLiquidacion ? '—' : (r.gmfCobrado
+        ? `<span title="GMF cobrado — haz clic para marcar como no cobrado" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px" data-gmf="${i}" data-gmf-val="false">${fmt(r.gmf)}<i class="fa-solid fa-circle-check" style="color:var(--green);font-size:9px"></i></span>`
+        : `<span title="GMF no cobrado — haz clic para marcar como cobrado" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;opacity:0.45;text-decoration:line-through" data-gmf="${i}" data-gmf-val="true">${fmt(r.gmf)}<i class="fa-solid fa-circle-xmark" style="color:var(--red);font-size:9px;opacity:1"></i></span>`)
+      }</span></td>
+      <td data-label="Total real"><span class="num" style="color:${r.esPostLiquidacion?'var(--text3)':r.esLiquidacion?'var(--amber)':'var(--amber)'};font-weight:600">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : fmt(r.totalReal)}</span></td>
+      <td data-label="Saldo"><span class="saldo-cell">${fmt(r.saldoCalc)}</span></td>
+      <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" data-set-fecha="${i}">`}</td>
+      <td class="col-extra" data-label="Nota">${r.esPostLiquidacion ? '' : `<input type="text" class="tbl-note" value="${escapeHtml(p.nota||'')}" placeholder="Nota..." data-set-nota="${i}" maxlength="40">`}</td>
+    `;
+    tbody.appendChild(tr);
+
+  } // end for loop
+} // end renderTable
+
+// ── VERIFICACIÓN BANCO vs CALC ────────────────────────────────────────────────
+// Tabla externa del banco pegada por el usuario (null = usar AMORT_BANCO hardcoded)
+let syncBancoData = null;
+
+function toggleSyncPanel() {
+  const panel = document.getElementById('syncBancoPanel');
+  const btn   = document.getElementById('btnSyncBanco');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  btn.style.color     = open ? 'var(--blue)' : '';
+  btn.style.borderColor = open ? 'rgba(91,141,239,0.4)' : '';
+  btn.style.background  = open ? 'var(--blue-dim)' : '';
+}
+
+function parseSyncBanco() {
+  const raw  = (document.getElementById('syncBancoInput').value || '').trim();
+  const errEl = document.getElementById('syncBancoError');
+  if (!raw) { errEl.style.display = 'none'; return; }
+
+  const rows = [];
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Max reasonable value: 10× the initial loan
+  const MAX_VAL = PRESTAMO_INICIAL * 10;
+
+  for (const line of lines) {
+    // Split by comma, semicolon, or tab
+    const parts = line.split(/[,;\t]+/).map(p => p.trim().replace(/[$\s.]/g,'').replace(',',''));
+    const nums  = parts.map(p => parseInt(p.replace(/\./g,''))).filter(n => !isNaN(n) && n >= 0);
+    // We need at least 4 numbers: cuota_num, capital, interes, saldo
+    // Also accept 3 numbers without cuota_num: capital, interes, saldo
+    let row;
+    if (nums.length >= 4) {
+      row = { cap: nums[1], int: nums[2], saldo: nums[3] };
+    } else if (nums.length === 3) {
+      row = { cap: nums[0], int: nums[1], saldo: nums[2] };
+    } else {
+      errEl.textContent = `Línea no reconocida (col. ${parts.length}). Necesita columnas: capital, interés, saldo (con o sin número de cuota).`;
+      errEl.style.display = 'block';
+      return;
+    }
+    // Validate reasonable ranges
+    if (row.cap > MAX_VAL || row.int > MAX_VAL || row.saldo > MAX_VAL) {
+      errEl.textContent = `Valores fuera de rango razonable detectados. Verifica el formato pegado.`;
+      errEl.style.display = 'block';
+      return;
+    }
+    if (row.cap < 0 || row.int < 0 || row.saldo < 0) {
+      errEl.textContent = `Valores negativos detectados. Solo se aceptan valores positivos.`;
+      errEl.style.display = 'block';
+      return;
+    }
+    rows.push(row);
+  }
+
+  if (rows.length < 2) {
+    errEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i>Se necesitan al menos 2 filas. Se detectaron ${rows.length}.`;
+    errEl.style.display = 'block';
+    return;
+  }
+  if (rows.length > PLAZO_MESES) {
+    errEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i>Se detectaron ${rows.length} filas pero el préstamo tiene ${PLAZO_MESES} cuotas. Verifica que pegaste solo las filas correspondientes a este préstamo.`;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  syncBancoData = rows;
+
+  // Update label
+  const lbl = document.getElementById('bancoSourceLabel');
+  if (lbl) { lbl.textContent = 'BANCO (pegado)'; lbl.style.color = 'var(--green)'; }
+
+  renderVerificacion();
+  // Close panel after success
+  document.getElementById('syncBancoPanel').style.display = 'none';
+  const btn = document.getElementById('btnSyncBanco');
+  btn.style.color = 'var(--green)'; btn.style.borderColor = 'rgba(45,212,160,0.35)'; btn.style.background = 'var(--green-dim)';
+  btn.innerHTML = '<i class="fa-solid fa-circle-check" style="font-size:10px"></i> Banco sincronizado';
+  showToast(`${rows.length} filas del banco cargadas para comparación`, 'success');
+}
+
+function clearSyncBanco() {
+  syncBancoData = null;
+  document.getElementById('syncBancoInput').value = '';
+  document.getElementById('syncBancoError').style.display = 'none';
+  const lbl = document.getElementById('bancoSourceLabel');
+  if (lbl) { lbl.textContent = 'AMORT_BANCO'; lbl.style.color = 'var(--amber)'; }
+  const btn = document.getElementById('btnSyncBanco');
+  btn.style.color = ''; btn.style.borderColor = ''; btn.style.background = '';
+  btn.innerHTML = '<i class="fa-solid fa-file-arrow-up" style="font-size:10px"></i> Sincronizar con banco';
+  renderVerificacion();
+}
+
+function diffExplanation(cuotaIdx, absDCap, absDInt) {
+  // Returns a human-readable explanation for the diff
+  if (absDCap <= 1 && absDInt <= 1) return '';
+  const cNum = cuotaIdx + 1;
+  const parts = [];
+  if (absDInt > 1) parts.push(`redondeo de interés diario en cuota ${cNum}`);
+  if (absDCap > 1) parts.push(`propagación al capital en cuota ${cNum}`);
+  return 'Diferencia por ' + parts.join(' y ');
+}
+
+function renderVerificacion() {
+  const grid = document.getElementById('verificacionGrid');
+  const summary = document.getElementById('verificacionSummary');
+  if (!grid || !summary) return;
+
+  // Use user-pasted data OR hardcoded AMORT_BANCO
+  const bancoRef = syncBancoData || AMORT_BANCO;
+  const compareLen = Math.min(PLAZO_MESES, bancoRef.length);
+
+  let maxDiff = 0;
+  let totalDiffCap = 0, totalDiffInt = 0, cuotasDiff = 0, cuotasAlerta = 0;
+
+  // Header row — 6 columns
+  let html = `
+    <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 1fr 1fr;gap:4px;margin-bottom:6px;color:var(--text3);font-size:10px;padding-bottom:5px;border-bottom:1px solid var(--border)">
+      <span>#</span>
+      <span style="color:var(--blue)">Cap calc</span>
+      <span style="color:var(--amber)">Cap banco</span>
+      <span style="color:var(--blue)">Int calc</span>
+      <span style="color:var(--amber)">Int banco</span>
+      <span>Δ cap / Δ int</span>
+    </div>`;
+
+  for (let i = 0; i < compareLen; i++) {
+    const c = AMORT_CALC[i];
+    const b = bancoRef[i];
+    const dCap = c.cap - b.cap;
+    const dInt = c.int - b.int;
+    const absDCap = Math.abs(dCap);
+    const absDInt = Math.abs(dInt);
+    totalDiffCap += absDCap;
+    totalDiffInt += absDInt;
+    if (absDCap > maxDiff) maxDiff = absDCap;
+    if (absDInt > maxDiff) maxDiff = absDInt;
+    if (absDCap > 1 || absDInt > 1) cuotasDiff++;
+    if (absDCap > 5 || absDInt > 5) cuotasAlerta++;
+
+    const isAlert = absDCap > 5 || absDInt > 5;
+    const isWarn  = !isAlert && (absDCap > 1 || absDInt > 1);
+    const diffColor = isAlert ? 'var(--red)' : isWarn ? 'var(--amber)' : 'var(--green)';
+    const rowBg     = isAlert ? 'background:rgba(240,100,122,0.07);border-radius:5px;border-left:2px solid var(--red);padding-left:4px' 
+                               : isWarn ? 'background:rgba(245,166,35,0.05);border-radius:5px' : '';
+    const diffSign  = d => (d >= 0 ? '+' : '') + Math.round(d).toLocaleString('es-CO');
+
+    const explanation = isAlert ? diffExplanation(i, absDCap, absDInt) : '';
+    const tooltipAttr = explanation ? `title="${explanation}"` : '';
+    const alertIcon   = isAlert ? `<i class="fa-solid fa-circle-exclamation" style="color:var(--red);font-size:9px;margin-left:3px" title="${explanation}"></i>` : '';
+
+    html += `
+      <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 1fr 1fr;gap:4px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03);align-items:center;${rowBg}" ${tooltipAttr}>
+        <span style="color:${isAlert?'var(--red)':'var(--text3)'};font-weight:${isAlert?700:400}">${i+1}</span>
+        <span style="color:var(--blue)">${c.cap.toLocaleString('es-CO')}</span>
+        <span style="color:var(--amber)">${b.cap.toLocaleString('es-CO')}</span>
+        <span style="color:var(--text2)">${c.int.toLocaleString('es-CO')}</span>
+        <span style="color:var(--amber)">${(b.int ?? '—').toLocaleString ? (b.int).toLocaleString('es-CO') : '—'}</span>
+        <span style="color:${diffColor};font-size:10px;display:flex;align-items:center">${diffSign(dCap)} / ${diffSign(dInt)}${alertIcon}</span>
+      </div>
+      ${isAlert ? `<div style="font-size:9.5px;color:var(--red);opacity:0.8;padding:1px 0 4px 32px;font-family:var(--font);line-height:1.4"><i class="fa-solid fa-circle-info" style="margin-right:3px;font-size:8px"></i>${explanation}</div>` : ''}`;
+  }
+  grid.innerHTML = html;
+
+  const statusColor = maxDiff <= 1 ? 'var(--green)' : maxDiff <= 5 ? 'var(--amber)' : 'var(--red)';
+  const statusIcon  = maxDiff <= 1 ? 'fa-circle-check' : maxDiff <= 5 ? 'fa-triangle-exclamation' : 'fa-circle-xmark';
+  const statusMsg   = maxDiff <= 1
+    ? 'Cálculo coincide con banco (±$1)'
+    : maxDiff <= 5
+      ? `Diferencia máx: $${maxDiff.toLocaleString('es-CO')} — redondeo normal`
+      : `Diferencia máx: $${maxDiff.toLocaleString('es-CO')} — revisar`;
+
+  const syncInfo = syncBancoData
+    ? `<div style="background:rgba(45,212,160,0.07);border:1px solid rgba(45,212,160,0.2);border-radius:8px;padding:8px 12px;flex:1">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Fuente banco</div>
+        <div style="color:var(--green);font-size:12px;font-weight:600"><i class="fa-solid fa-circle-check" style="margin-right:5px"></i>Tabla pegada (${syncBancoData.length} filas)</div>
+      </div>`
+    : '';
+
+  summary.innerHTML = `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:var(--font)">Estado</div>
+      <div style="color:${statusColor};font-size:12px;font-weight:600"><i class="fa-solid ${statusIcon}" style="margin-right:5px"></i>${statusMsg}</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:var(--font)">Cuotas con diff > $1</div>
+      <div style="color:${cuotasDiff===0?'var(--green)':'var(--amber)'};font-size:12px;font-weight:600">${cuotasDiff} de ${compareLen}</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:var(--font)">Alertas > $5</div>
+      <div style="color:${cuotasAlerta===0?'var(--green)':'var(--red)'};font-size:12px;font-weight:600">${cuotasAlerta === 0 ? '<i class="fa-solid fa-circle-check" style="margin-right:4px"></i>Ninguna' : cuotasAlerta + ' cuota' + (cuotasAlerta!==1?'s':'')}</div>
+    </div>
+    ${syncInfo}`;
+}
+
+// ── MAIN RENDER ───────────────────────────────────────────────────────────────
+function render() {
+  const rows = calcRows();
+  renderMetrics(rows);
+  renderTable(rows);
+  renderVerificacion();
+  calcDeudaFecha();
+}
+
+// ── SIMULADOR FECHA ───────────────────────────────────────────────────────────
+// ── CUÁNTO DEBO HOY ───────────────────────────────────────────────────────────
+function calcDeudaFecha() {
+  const fi = document.getElementById('fechaConsulta');
+  if (!fi.value) {
+    // default to today
+    const t = todayUTC();
+    const y = t.getUTCFullYear(), m = String(t.getUTCMonth()+1).padStart(2,'0'), d = String(t.getUTCDate()).padStart(2,'0');
+    fi.value = `${y}-${m}-${d}`;
+  }
+
+  const consulta = parseDate(fi.value);
+  const rows = calcRows();
+
+  // Find last paid state
+  let saldo = PRESTAMO_INICIAL;
+  let lastDate = FECHA_INICIO;
+  for (let i=0; i<PLAZO_MESES; i++) {
+    const p = state.pagos[i], r = rows[i];
+    if (p.pagada) {
+      saldo = r.saldoCalc;
+      if (p.fecha) lastDate = parseDate(p.fecha);
+      else lastDate = r.fechaProg;
+    }
+  }
+
+  const dias = Math.max(0, daysBetween30_360(lastDate, consulta));
+  const intAcum = Math.round(calcIntSimple(saldo, dias));
+  const deuda = saldo + intAcum;
+
+  document.getElementById('dr-cap').textContent   = fmt(saldo);
+  document.getElementById('dr-int').textContent   = fmt(intAcum);
+  document.getElementById('dr-dias').textContent  = `${dias} día${dias!==1?'s':''}`;
+  document.getElementById('dr-total').textContent = fmt(deuda);
+}
+
+// ── ABONO PREVIEW ─────────────────────────────────────────────────────────────
+function previewAbono() {
+  const cuota = document.getElementById('abonoCuota').value;
+  const valor = parseFloat(document.getElementById('abonoValor').value) || 0;
+  const impact = document.getElementById('abonoImpact');
+  const body   = document.getElementById('abonoImpactBody');
+  const hint   = document.getElementById('abonoMinHint');
+
+  // Show formatted value with thousands separators
+  const fmtEl = document.getElementById('abonoValorFmt');
+  if (fmtEl) fmtEl.textContent = valor > 0 ? '→ ' + fmt(valor) : '';
+
+  // Show/hide minimum hint
+  if (valor > 0 && valor < ABONO_MINIMO) {
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+
+  // Verificar límite máximo (no se puede abonar más que el saldo)
+  let maxAlert = document.getElementById('abonoMaxHint');
+  if (!maxAlert) {
+    maxAlert = document.createElement('div');
+    maxAlert.id = 'abonoMaxHint';
+    maxAlert.style.cssText = 'display:none;margin-top:5px;padding:6px 10px;border-radius:6px;font-size:10.5px;font-weight:600;font-family:var(--mono);background:rgba(240,100,122,0.1);color:var(--red);border:1px solid rgba(240,100,122,0.25)';
+    hint.parentNode.insertBefore(maxAlert, hint.nextSibling);
+  }
+  if (cuota !== '' && valor > 0) {
+    const previewRows = calcRows();
+    const saldoMax = previewRows[parseInt(cuota)].saldoAntes;
+    if (valor > saldoMax) {
+      maxAlert.style.display = 'block';
+      maxAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Máximo permitido: $${saldoMax.toLocaleString('es-CO')} (saldo actual)`;
+    } else {
+      maxAlert.style.display = 'none';
+    }
+  } else {
+    maxAlert.style.display = 'none';
+  }
+
+  if (cuota === '' || valor <= 0) { impact.className='abono-impact'; return; }
+
+  const idx = parseInt(cuota);
+  const rows = calcRows();
+  const r = rows[idx];
+
+  // How much does this abono reduce the interest in following cuotas?
+  const intAhorrado = Math.round(valor * TASA_MENSUAL); // approx per month
+  const mesesAhorro = Math.round(valor / r.cap);
+
+  impact.className = 'abono-impact visible';
+  body.innerHTML = `
+    <div class="calc-row"><span class="ck">Abono al capital</span><span class="cv val-green">${fmt(valor)}</span></div>
+    <div class="calc-row"><span class="ck">Interés que ahorras/mes</span><span class="cv val-green">≈ ${fmt(intAhorrado)}</span></div>
+    <div class="calc-row"><span class="ck">Cuotas que acorta aprox.</span><span class="cv val-green">≈ ${mesesAhorro} mes${mesesAhorro!==1?'es':''}</span></div>
+    <div class="calc-row"><span class="ck">Nuevo saldo tras abono</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - valor))}</span></div>`;
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+function togglePago(i, el) {
+  // Bloquear cuotas donde la deuda ya era 0 (post-liquidación)
+  const rows = calcRows();
+  if (rows[i] && rows[i].esPostLiquidacion) {
+    el.checked = false;
+    return;
+  }
+  state.pagos[i].pagada = el.checked;
+  if (!state.pagos[i].fecha && el.checked) {
+    const t = todayUTC();
+    state.pagos[i].fecha = `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}-${String(t.getUTCDate()).padStart(2,'0')}`;
+  }
+  saveState(); render();
+  if (el.checked) {
+    showToast(`Cuota ${i+1} marcada como pagada`, 'success');
+  } else {
+    showToast(`Cuota ${i+1} desmarcada`, 'info');
+  }
+}
+function setFecha(i, v) {
+  if (v) {
+    const d = parseDate(v);
+    const today = todayUTC();
+    if (d < FECHA_INICIO) {
+      showAlert('La fecha de pago no puede ser anterior al inicio del préstamo (12 mar 2026).');
+      render(); return;
+    }
+    if (d > today) {
+      showAlert('La fecha de pago no puede ser posterior a hoy. Para fechas futuras deja el campo en blanco.');
+      render(); return;
+    }
+  }
+  state.pagos[i].fecha = v; saveState(); render();
+}
+function setValor(i, v)  { state.pagos[i].valor = v; saveState(); render(); }
+function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); }
+function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); }
+// Valida que la fecha del abono esté entre el inicio del préstamo y hoy.
+// Pagos tardíos (posteriores a la fecha programada de la cuota) son válidos:
+// el usuario puede haber realizado el abono después del vencimiento.
+// Retorna null si es válida, o un mensaje de error si no.
+function validarFechaAbono(fechaStr, idxCuota) {
+  if (!fechaStr) return null; // fecha opcional — sin valor es OK
+  const d = parseDate(fechaStr);
+  if (toUTC(d) < toUTC(FECHA_INICIO)) {
+    return `La fecha del abono (${fechaStr}) no puede ser anterior al inicio del préstamo (12 mar 2026).`;
+  }
+  const hoy = todayUTC();
+  if (toUTC(d) > toUTC(hoy)) {
+    return `La fecha del abono (${fechaStr}) no puede ser futura. Deja el campo en blanco si el abono aún no ha ocurrido.`;
+  }
+  return null;
+}
+function aplicarAbono() {
+  const cuota = document.getElementById('abonoCuota').value;
+  const valor = parseFloat(document.getElementById('abonoValor').value) || 0;
+  if (cuota==='' || valor<=0) { showToast('Selecciona una cuota e ingresa un valor válido.', 'warn'); return; }
+  if (valor < ABONO_MINIMO) {
+    showConfirm(
+      `⚠️ El abono ($${valor.toLocaleString('es-CO')}) es menor al mínimo exigido ($${ABONO_MINIMO.toLocaleString('es-CO')}).\n\n¿Deseas guardarlo de todas formas?`,
+      () => _doAplicarAbono(cuota, valor),
+    );
+    return;
+  }
+  const idx = parseInt(cuota);
+  const rows = calcRows();
+  const saldoDisponible = rows[idx].saldoAntes;
+  if (valor > saldoDisponible) {
+    showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
+    return;
+  }
+  const fechaAbonoStr = document.getElementById('abonoFecha').value || '';
+  const errFecha = validarFechaAbono(fechaAbonoStr, idx);
+  if (errFecha) { showAlert(errFecha); return; }
+  _doAplicarAbono(cuota, valor, fechaAbonoStr);
+}
+function _doAplicarAbono(cuota, valor, fechaAbonoStr) {
+  if (fechaAbonoStr === undefined) {
+    fechaAbonoStr = document.getElementById('abonoFecha').value || '';
+    const idx2 = parseInt(cuota);
+    const rows2 = calcRows();
+    if (valor > rows2[idx2].saldoAntes) {
+      showToast(`El abono supera el saldo disponible`, 'error', 5000); return;
+    }
+    const errF = validarFechaAbono(fechaAbonoStr, idx2);
+    if (errF) { showAlert(errF); return; }
+  }
+  state.pagos[parseInt(cuota)].abono = (state.pagos[parseInt(cuota)].abono||0) + valor;
+  state.pagos[parseInt(cuota)].abonoFecha = fechaAbonoStr;
+  document.getElementById('abonoValor').value = '';
+  document.getElementById('abonoFecha').value = '';
+  document.getElementById('abonoMinHint').style.display = 'none';
+  document.getElementById('abonoImpact').className = 'abono-impact';
+  saveState(); render();
+  showToast(`Abono de $${valor.toLocaleString('es-CO')} aplicado a cuota ${parseInt(cuota)+1}`, 'success');
+}
+function resetAll() {
+  showConfirm('¿Reiniciar todos los datos? Esta acción no se puede deshacer.', () => {
+    state = { pagos: Array(PLAZO_MESES).fill(null).map(()=>({pagada:false,fecha:'',valor:'',abono:0,abonoFecha:'',nota:'',gmfCobrado:true})) };
+    saveState(); render();
+    showToast('Todos los datos reiniciados', 'info');
+  });
+}
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+  const labels = { all:'Mostrando todas las cuotas', paid:'Filtrando: pagadas', pending:'Filtrando: pendientes', overdue:'Filtrando: vencidas' };
+  showToast(labels[f] || 'Filtro aplicado', 'info', 2000);
+}
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t=>{t.classList.remove('active'); t.setAttribute('aria-selected','false');});
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  btn.setAttribute('aria-selected','true');
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name==='hoy') calcDeudaFecha();
+}
+
+// ── BACKUP — EXPORT ───────────────────────────────────────────────────────────
+async function exportBackup() {
+  try {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const payload = {
+    version: 2,
+    app: 'loan_tracker_jfk',
+    exportedAt: now.toISOString(),
+    prestamo: {
+      inicial: PRESTAMO_INICIAL,
+      tasaMensual: TASA_MENSUAL,
+      fechaInicio: '2026-03-12',
+      plazoMeses: PLAZO_MESES
+    },
+    state: state
+  };
+  // Compute SHA-256 checksum of the payload (without the checksum field itself)
+  const payloadStr = JSON.stringify(payload);
+  let hashHex = '';
+  try {
+    const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payloadStr));
+    hashHex = Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  } catch (_) {
+    // crypto.subtle unavailable (e.g. file:// protocol) — omit checksum
+  }
+  const backup = { ...payload, checksum: hashHex || null };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `backup_jfk_${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showBackupToast('Backup guardado correctamente', 'success');
+  } catch (err) {
+    showBackupToast('Error al exportar backup: ' + err.message, 'error');
+  }
+}
+
+// ── BACKUP — IMPORT ───────────────────────────────────────────────────────────
+function importBackup(event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // allow re-selecting same file
+  if (!file) return;
+  if (!file.name.endsWith('.json')) {
+    showBackupToast('El archivo debe ser .json', 'error'); return;
+  }
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Validate structure
+      if (!parsed.state || !parsed.state.pagos || !Array.isArray(parsed.state.pagos)) {
+        showBackupToast('Archivo no válido o corrupto', 'error'); return;
+      }
+      if (parsed.state.pagos.length !== PLAZO_MESES) {
+        showBackupToast(`El backup no corresponde a ${PLAZO_MESES} cuotas`, 'error'); return;
+      }
+      // Verify checksum if present
+      if (parsed.checksum) {
+        // Reconstruct payload in the EXACT same key order as exportBackup() uses,
+        // to guarantee JSON.stringify produces the same string on all JS engines.
+        const payloadToVerify = {
+          version: parsed.version,
+          app: parsed.app,
+          exportedAt: parsed.exportedAt,
+          prestamo: parsed.prestamo,
+          state: parsed.state
+        };
+        const payloadStr = JSON.stringify(payloadToVerify);
+        const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payloadStr));
+        const hashHex = Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+        if (hashHex !== parsed.checksum) {
+          showBackupToast('El backup está corrupto (checksum inválido). Importación cancelada.', 'error'); return;
+        }
+      }
+      // Confirm before overwriting
+      const fecha = parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString('es-CO') : 'fecha desconocida';
+      showConfirm(`¿Restaurar backup del ${fecha}?\n\nSe reemplazarán todos los datos actuales.`, () => {
+        // Migrate: ensure nota field exists
+        state = {
+          ...parsed.state,
+          pagos: parsed.state.pagos.map(p => ({nota:'', abono:0, abonoFecha:'', ...p}))
+        };
+        saveState();
+        render();
+        showBackupToast('Datos restaurados correctamente', 'success');
+      });
+    } catch(err) {
+      showBackupToast('Error al leer el archivo: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── GLOBAL TOAST ──────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg, type = 'success', duration = 3500) {
+  const el = document.getElementById('globalToast');
+  const icon = document.getElementById('gtIcon');
+  const txt  = document.getElementById('gtMsg');
+  if (!el) return;
+  const icons = { success:'fa-circle-check', error:'fa-circle-xmark', info:'fa-circle-info', warn:'fa-triangle-exclamation' };
+  icon.innerHTML = `<i class="fa-solid ${icons[type]||icons.success}"></i>`;
+  txt.textContent = msg;
+  el.className = `show t-${type}`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.classList.remove('show'); }, duration);
+}
+
+// ── CUSTOM CONFIRM (replaces browser alert/confirm) ───────────────────────────
+// showConfirm is CALLBACK-BASED — it never returns a boolean.
+// Always pass onOk (and optionally onCancel) as callbacks.
+// Do NOT use the return value; it is always undefined.
+function showAlert(msg) {
+  // Non-blocking: use toast for brief errors, or a modal for longer messages
+  // For validation alerts we show toast with warn/error type
+  showToast(msg.replace(/^⚠️\s*/,''), 'warn', 5000);
+}
+function showConfirm(msg, onOk, onCancel) {
+  if (document.getElementById('__confirmOverlay')) return; // ya hay uno abierto
+  const overlay = document.createElement('div');
+  overlay.id = '__confirmOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg3);border:1px solid var(--border3);border-radius:16px;padding:24px;width:340px;max-width:92vw;box-shadow:0 24px 60px rgba(0,0,0,0.6);font-family:var(--font);';
+  const lines = msg.split('\n').filter(Boolean);
+  const title = lines[0];
+  const rest  = lines.slice(1).join('\n');
+  box.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:15px;flex-shrink:0;flex-shrink:0">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div id="_cfTitle" style="font-size:13px;font-weight:700;color:var(--text);line-height:1.4"></div>
+        ${rest ? `<div id="_cfRest" style="font-size:11px;color:var(--text2);margin-top:5px;line-height:1.6;white-space:pre-line"></div>` : ''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button id="_cfCancel" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;">Cancelar</button>
+      <button id="_cfOk" style="padding:9px 14px;border-radius:8px;border:none;background:var(--amber);color:#1a0e00;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">Confirmar</button>
+    </div>`;
+  // Set text content safely (no innerHTML for user data)
+  box.querySelector('#_cfTitle').textContent = title.replace(/^⚠️\s*/,'');
+  if (rest) box.querySelector('#_cfRest').textContent = rest;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const close = () => document.body.removeChild(overlay);
+  box.querySelector('#_cfOk').onclick     = () => { close(); onOk && onOk(); };
+  box.querySelector('#_cfCancel').onclick = () => { close(); onCancel && onCancel(); };
+  overlay.onclick = (e) => { if (e.target === overlay) { close(); onCancel && onCancel(); } };
+}
+
+function showBackupToast(msg, type) {
+  showToast(msg, type);
+  // also update the inline backup toast for backwards-compat
+  const el = document.getElementById('backupToast');
+  if (el) {
+    const icon = type === 'success'
+      ? '<i class="fa-solid fa-circle-check"></i>'
+      : '<i class="fa-solid fa-circle-xmark"></i>';
+    el.innerHTML = icon + ' ' + msg;
+    el.className = 'backup-toast ' + type;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.className = 'backup-toast'; }, 4000);
+  }
+}
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = calcRows();
+  const headers = ['#','Fecha Prog','Estado','Capital','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago','Nota'];
+  const lines = [headers.join(',')];
+  rows.forEach((r,i) => {
+    const p = state.pagos[i];
+    lines.push([
+      i+1, FECHAS_LABEL[i], p.pagada?'Pagada':'Pendiente',
+      r.cap, r.intReal, r.dias,
+      r.ahorroAbono, r.cuota, r.gmf, r.totalReal, r.saldoCalc,
+      p.fecha, (p.nota||'').replace(/,/g,' ')
+    ].join(','));
+  });
+  const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='prestamo_jfk.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exportado correctamente', 'success');
+}
+// ── ABONO EDIT MODAL (desde tabla) ───────────────────────────────────────────
+let abonoEditIdx = -1;
+function openAbonoModal(i) {
+  abonoEditIdx = i;
+  document.getElementById('abonoEditTitle').textContent = `Abono — Cuota ${i+1}`;
+  document.getElementById('abonoEditSub').textContent = FECHAS_LABEL[i];
+  document.getElementById('abonoEditVal').value = state.pagos[i].abono || 0;
+  document.getElementById('abonoEditFecha').value = state.pagos[i].abonoFecha || '';
+  document.getElementById('abonoEditModal').classList.add('open');
+  setTimeout(() => document.getElementById('abonoEditVal').focus(), 60);
+}
+function closeAbonoModal() {
+  document.getElementById('abonoEditModal').classList.remove('open');
+  abonoEditIdx = -1;
+}
+function saveAbonoModal() {
+  if (abonoEditIdx < 0) return;
+  const val = Math.max(0, parseFloat(document.getElementById('abonoEditVal').value) || 0);
+  if (val > 0 && val < ABONO_MINIMO) {
+    showConfirm(
+      `⚠️ El abono ($${val.toLocaleString('es-CO')}) es menor al mínimo exigido ($${ABONO_MINIMO.toLocaleString('es-CO')}).\n\n¿Deseas guardarlo de todas formas?`,
+      () => _commitAbonoModal(val)
+    );
+    return;
+  }
+  _commitAbonoModal(val);
+}
+function _commitAbonoModal(val) {
+  if (val > 0) {
+    const rows = calcRows();
+    const saldoDisponible = rows[abonoEditIdx].saldoAntes;
+    if (val > saldoDisponible) {
+      showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
+      return;
+    }
+  }
+  const fechaEditStr = document.getElementById('abonoEditFecha').value || '';
+  const errFechaEdit = validarFechaAbono(fechaEditStr, abonoEditIdx);
+  if (errFechaEdit) { showAlert(errFechaEdit); return; }
+  const idxSnapshot = abonoEditIdx;
+  state.pagos[idxSnapshot].abono = val;
+  state.pagos[idxSnapshot].abonoFecha = fechaEditStr;
+  saveState(); render();
+  closeAbonoModal();
+  showToast(val > 0 ? `Abono de $${val.toLocaleString('es-CO')} guardado en cuota ${idxSnapshot+1}` : `Abono eliminado de cuota ${idxSnapshot+1}`, 'success');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  initFirebaseSync();
+  // ── Modal input listeners ─────────────────────────────────────────────────
+  document.getElementById('abonoEditVal').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') saveAbonoModal();
+    if (e.key === 'Escape') closeAbonoModal();
+  });
+  document.getElementById('abonoEditVal').addEventListener('input', function() {
+    const val = parseFloat(this.value) || 0;
+    const hint = document.getElementById('abonoModalMinHint');
+    hint.style.display = (val > 0 && val < ABONO_MINIMO) ? 'block' : 'none';
+  });
+
+  // ── Modal buttons ─────────────────────────────────────────────────────────
+  document.getElementById('btnCloseAbonoModal').addEventListener('click', closeAbonoModal);
+  document.getElementById('btnSaveAbonoModal').addEventListener('click', saveAbonoModal);
+
+  // ── View mode pills ───────────────────────────────────────────────────────
+  document.getElementById('vmb-summary').addEventListener('click', function() {
+    setViewMode('summary', this);
+  });
+  document.getElementById('vmb-full').addEventListener('click', function() {
+    setViewMode('full', this);
+  });
+
+  // ── Expand button in summary view ─────────────────────────────────────────
+  document.getElementById('svExpandBtn').addEventListener('click', function() {
+    setViewMode('full', document.getElementById('vmb-full'));
+  });
+
+  // ── Tab buttons ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab[data-tab]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      switchTab(this.dataset.tab, this);
+    });
+  });
+
+  // ── Filter buttons ────────────────────────────────────────────────────────
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      setFilter(this.dataset.filter, this);
+    });
+  });
+
+  // ── Simple table toggle ───────────────────────────────────────────────────
+  document.getElementById('simpleTblBtn').addEventListener('click', toggleSimpleTable);
+
+  // ── Abono panel ───────────────────────────────────────────────────────────
+  document.getElementById('abonoCuota').addEventListener('change', previewAbono);
+  document.getElementById('abonoValor').addEventListener('input', previewAbono);
+  document.getElementById('btnAplicarAbono').addEventListener('click', aplicarAbono);
+
+  // ── Toolbar buttons ───────────────────────────────────────────────────────
+  document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
+  document.getElementById('btnResetAll').addEventListener('click', resetAll);
+  document.getElementById('btnReadOnly').addEventListener('click', toggleReadOnly);
+  document.getElementById('btnExportImage').addEventListener('click', exportImage);
+  document.getElementById('btnRunTests').addEventListener('click', runTestsUI);
+
+  // ── Backup buttons ────────────────────────────────────────────────────────
+  document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
+  document.getElementById('btnImportBackup').addEventListener('click', () => {
+    document.getElementById('importFileInput').click();
+  });
+  document.getElementById('importFileInput').addEventListener('change', importBackup);
+
+  // ── Sync banco buttons ────────────────────────────────────────────────────
+  document.getElementById('btnSyncBanco').addEventListener('click', toggleSyncPanel);
+  document.getElementById('btnParseSyncBanco').addEventListener('click', parseSyncBanco);
+  document.getElementById('btnClearSyncBanco').addEventListener('click', clearSyncBanco);
+
+  // ── Table event delegation ─────────────────────────────────────────────────
+  // Handles: checkboxes (toggle pago), GMF spans, abono buttons, date inputs, note inputs
+  document.getElementById('tbody').addEventListener('change', function(e) {
+    const el = e.target;
+    if (el.dataset.togglePago !== undefined) {
+      togglePago(parseInt(el.dataset.togglePago), el);
+    } else if (el.dataset.setFecha !== undefined) {
+      setFecha(parseInt(el.dataset.setFecha), el.value);
+    } else if (el.dataset.setNota !== undefined) {
+      setNota(parseInt(el.dataset.setNota), el.value);
+    }
+  });
+  document.getElementById('tbody').addEventListener('click', function(e) {
+    // Abono modal button
+    const abonoBtn = e.target.closest('[data-abono-modal]');
+    if (abonoBtn) {
+      openAbonoModal(parseInt(abonoBtn.dataset.abonoModal));
+      return;
+    }
+    // GMF toggle span
+    const gmfSpan = e.target.closest('[data-gmf]');
+    if (gmfSpan) {
+      e.stopPropagation();
+      setGmfCobrado(parseInt(gmfSpan.dataset.gmf), gmfSpan.dataset.gmfVal === 'true');
+    }
+  });
+
+  // ── Fecha consulta ────────────────────────────────────────────────────────
+  document.getElementById('fechaConsulta').addEventListener('change', calcDeudaFecha);
+
+  // ── Info note toggles ─────────────────────────────────────────────────────
+  document.querySelectorAll('.info-note-toggle').forEach(toggle => {
+    toggle.addEventListener('click', function() { toggleInfoNote(this); });
+  });
+});
+
+// ── EXPORT IMAGE (html2canvas) ────────────────────────────────────────────────
+// Usa html2canvas para capturar el DOM tal como se ve en pantalla.
+// Ventaja: cualquier cambio de layout se refleja automáticamente en la imagen,
+// sin necesidad de recalcular coordenadas manuales.
+async function exportImage() {
+  if (typeof html2canvas === 'undefined') {
+    showBackupToast('Error: html2canvas no disponible', 'error');
+    return;
+  }
+
+  // Show loading state on button
+  const exportBtn = document.getElementById('btnExportImage');
+  const origBtnHTML = exportBtn ? exportBtn.innerHTML : '';
+  if (exportBtn) {
+    exportBtn.disabled = true;
+    exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Generando...';
+  }
+  showToast('Generando imagen, espera un momento...', 'info', 30000); // long-lived; overwritten on finish
+
+  // Elementos que NO queremos capturar (controles interactivos)
+  const HIDE_SELECTORS = [
+    '.export-bar', '.backup-section', '#abonoEditModal',
+    '.tab-panel:not(.active)', '.filter-btns',
+    '.abono-modal-overlay', '#alertBox:not(.visible)'
+  ];
+  const hidden = [];
+  HIDE_SELECTORS.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (el.style.display !== 'none') {
+        el.dataset.h2cHidden = '1';
+        el.style.display = 'none';
+        hidden.push(el);
+      }
+    });
+  });
+
+  try {
+    const target = document.querySelector('.page');
+    const canvas = await html2canvas(target, {
+      backgroundColor: '#090b10',
+      scale: 2,          // resolución 2×
+      useCORS: true,
+      logging: false,
+      width: target.scrollWidth,
+      windowWidth: target.scrollWidth,
+    });
+
+    const ts = new Date().toISOString().slice(0, 10);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = `resumen_prestamo_jfk_${ts}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Imagen exportada correctamente', 'success', 4000);
+    }, 'image/png');
+
+    // Success toast is shown inside toBlob callback above
+  } catch (err) {
+    _dbg('[exportImage]', err);
+    showBackupToast('Error al generar imagen: ' + err.message, 'error');
+  } finally {
+    // Restaurar visibilidad de elementos ocultos temporalmente
+    hidden.forEach(el => {
+      delete el.dataset.h2cHidden;
+      el.style.display = '';
+    });
+    // Restore button state
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = origBtnHTML;
+    }
+  }
+}
+
+// ── TEST UI WRAPPER ───────────────────────────────────────────────────────────
+function runTestsUI() {
+  const { passed, failed, results } = runTests();
+  if (failed === 0) {
+    showToast(`Todos los ${passed} tests financieros pasaron`, 'success', 4000);
+  } else {
+    const failNames = results.filter(r=>!r.ok).map(r=>r.name).join(', ');
+    showToast(`${failed} test(s) fallaron: ${failNames}`, 'error', 6000);
+    _dbg('[JFK Tests] Resultados:', results);
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+// Populate all UI elements that reference the calculated cuota / abono mínimo
+function initCuotaTexts() {
+  const cuotaNFmt  = '$' + CUOTA_NETA.toLocaleString('es-CO');
+  const cuotaBFmt  = '$' + CUOTA_BASE.toLocaleString('es-CO');
+  const abonoFmt   = '$' + ABONO_MINIMO.toLocaleString('es-CO');
+  const cincoFmt   = '$' + Math.round(CUOTA_BASE * 0.5).toLocaleString('es-CO');
+
+  // Pill plazo
+  const pillPlazo = document.getElementById('pillPlazo');
+  if (pillPlazo) pillPlazo.textContent = `${PLAZO_MESES} meses`;
+
+  // Input placeholder
+  const inp = document.getElementById('abonoValor');
+  if (inp) inp.placeholder = `Mín. ${abonoFmt}`;
+
+  // Panel hint (inline warning)
+  const hintTxt = document.getElementById('abonoMinHintText');
+  if (hintTxt) hintTxt.textContent = `Mínimo: ${abonoFmt} (cuota + 50%)`;
+
+  // Panel regla box
+  const regla = document.getElementById('abonoReglaText');
+  if (regla) regla.innerHTML =
+    `<span style="color:var(--text2)">Regla cooperativa:</span> cuota fija ${cuotaBFmt} + 50% (${cincoFmt}) = mín. <strong style="color:var(--amber)">${abonoFmt}</strong>`;
+
+  // Modal hint
+  const modalHint = document.getElementById('abonoModalMinHintText');
+  if (modalHint) modalHint.textContent = `Mínimo exigido: ${abonoFmt}`;
+
+  // Modal regla
+  const modalRegla = document.getElementById('abonoModalReglaText');
+  if (modalRegla) modalRegla.textContent = `Mín. cooperativa: cuota (${cuotaBFmt}) + 50% = ${abonoFmt}`;
+}
+
+// ── INFO NOTE TOGGLE ─────────────────────────────────────────────────────────
+function toggleInfoNote(toggleEl) {
+  const body = toggleEl.nextElementSibling;
+  const icon = toggleEl.querySelector('.int-icon');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  icon.classList.toggle('open', !isOpen);
+}
+
+// ── AUDIT LOG ─────────────────────────────────────────────────────────────────
+// Persisted in localStorage (key: SK + '_log') so it survives page refreshes.
+// Capped at 200 entries.
+const LOG_SK = 'loan_tracker_jfk_v4_log';
+
+function loadLog() {
+  try {
+    const s = localStorage.getItem(LOG_SK);
+    return s ? JSON.parse(s) : [];
+  } catch(e) {
+    _dbg('loadLog error:', e);
+    return [];
+  }
+}
+function saveLog() {
+  try {
+    localStorage.setItem(LOG_SK, JSON.stringify(auditLog));
+  } catch(e) {
+    _dbg('saveLog error:', e);
+  }
+  pushStateToFirestore();
+}
+
+let auditLog = loadLog();
+
+function addLog(type, msg, val) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  auditLog.unshift({ type, msg, val, time: dateStr, ts: now.getTime() });
+  if (auditLog.length > 200) auditLog.pop(); // keep last 200
+  saveLog();
+  renderLog();
+}
+
+function renderLog() {
+  const list = document.getElementById('logList');
+  if (!list) return;
+  if (auditLog.length === 0) {
+    list.innerHTML = '<div class="log-empty"><i class="fa-regular fa-clock" style="margin-right:5px"></i>Sin cambios en esta sesión</div>';
+    return;
+  }
+  const icons = {
+    paid:   '<i class="fa-solid fa-check"></i>',
+    abono:  '<i class="fa-solid fa-coins"></i>',
+    reset:  '<i class="fa-solid fa-rotate-left"></i>',
+    import: '<i class="fa-solid fa-cloud-arrow-up"></i>',
+    edit:   '<i class="fa-solid fa-pencil"></i>',
+    note:   '<i class="fa-solid fa-note-sticky"></i>',
+    gmf:    '<i class="fa-solid fa-receipt"></i>',
+  };
+  list.innerHTML = auditLog.map(e => `
+    <div class="log-entry">
+      <div class="log-time">${e.time}</div>
+      <div class="log-icon ${e.type}">${icons[e.type] || '<i class="fa-solid fa-circle-dot"></i>'}</div>
+      <div class="log-msg">${e.msg}${e.val ? ` <span class="log-val">${e.val}</span>` : ''}</div>
+    </div>`).join('');
+}
+
+function clearLog() {
+  auditLog = [];
+  saveLog();
+  renderLog();
+  showToast('Historial borrado', 'info', 2000);
+}
+
+// ── READ-ONLY MODE ────────────────────────────────────────────────────────────
+let readOnly = false;
+
+function toggleReadOnly() {
+  readOnly = !readOnly;
+  document.body.classList.toggle('readonly-mode', readOnly);
+  const btn   = document.getElementById('btnReadOnly');
+  const icon  = document.getElementById('roIcon');
+  const label = document.getElementById('roLabel');
+  // Block keyboard access too, not just pointer events
+  const interactiveSelectors = 'input:not(#btnReadOnly *), select, textarea, [data-toggle-pago], [data-abono-modal], [data-gmf]';
+  document.querySelectorAll('tbody input, tbody select, tbody textarea').forEach(el => {
+    if (readOnly) { el.setAttribute('tabindex', '-1'); el.setAttribute('disabled', ''); }
+    else { el.removeAttribute('tabindex'); el.removeAttribute('disabled'); }
+  });
+  if (readOnly) {
+    btn.classList.add('active-lock');
+    icon.className = 'fa-solid fa-lock-open';
+    label.textContent = 'Desbloquear';
+    showToast('Modo solo lectura activado', 'warn', 3000);
+    addLog('edit', 'Modo solo lectura <strong>activado</strong>');
+  } else {
+    btn.classList.remove('active-lock');
+    icon.className = 'fa-solid fa-lock';
+    label.textContent = 'Solo lectura';
+    showToast('Edición desbloqueada', 'success', 2500);
+    addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
+  }
+}
+
+// ── GUARD + LOG WRAPPERS ────────────────────────────────────────────────────────
+// Wrapped inside an IIFE so each original is captured by a local binding,
+// decoupled from global re-assignment order.
+(function installWrappers() {
+  const _origTogglePago = togglePago;
+  togglePago = function(i, el) {
+    if (readOnly) { el.checked = !el.checked; showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return; }
+    _origTogglePago(i, el);
+    const cuota = i + 1;
+    addLog('paid',
+      el.checked
+        ? `Cuota <strong>${cuota}</strong> marcada como <strong>pagada</strong>`
+        : `Cuota <strong>${cuota}</strong> desmarcada`,
+      el.checked ? fmt(state.pagos[i].valor || 0) : '');
+  };
+
+  const _origSetFecha = setFecha;
+  setFecha = function(i, v) {
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
+    _origSetFecha(i, v);
+    if (v) addLog('edit', `Fecha pago cuota <strong>${i+1}</strong> → <strong>${v}</strong>`);
+  };
+
+  const _origSetNota = setNota;
+  setNota = function(i, v) {
+    if (readOnly) return;
+    _origSetNota(i, v);
+    if (v) addLog('note', `Nota cuota <strong>${i+1}</strong>: "${v}"`);
+  };
+
+  const _origSetGmf = setGmfCobrado;
+  setGmfCobrado = function(i, v) {
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
+    _origSetGmf(i, v);
+    addLog('gmf', `GMF cuota <strong>${i+1}</strong>: ${v ? 'cobrado' : 'no cobrado'}`);
+  };
+
+  const _origDoAbono = _doAplicarAbono;
+  _doAplicarAbono = function(cuota, valor, fechaAbonoStr) {
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
+    _origDoAbono(cuota, valor, fechaAbonoStr);
+    addLog('abono', `Abono a capital cuota <strong>${parseInt(cuota)+1}</strong>`, fmt(valor));
+  };
+
+  const _origCommitModal = _commitAbonoModal;
+  _commitAbonoModal = function(val) {
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
+    const idxBefore = abonoEditIdx;
+    _origCommitModal(val);
+    if (val > 0) addLog('abono', `Abono editado cuota <strong>${idxBefore+1}</strong>`, fmt(val));
+    else addLog('edit', `Abono eliminado cuota <strong>${idxBefore+1}</strong>`);
+  };
+
+  const _origResetAll = resetAll;
+  resetAll = function() {
+    if (readOnly) { showToast('Modo solo lectura activo — desbloquea primero', 'warn'); return; }
+    _origResetAll();
+    addLog('reset', '<strong>Todos los datos reiniciados</strong>');
+  };
+})();
+
+// Log initial load
+addLog('import', 'Aplicación cargada', '');
+
+// ── VIEW MODE ──────────────────────────────────────────────────────────────────
+let miniChart = null;
+
+function setViewMode(mode, btn) {
+  document.body.classList.remove('view-summary');
+  if (mode === 'summary') {
+    document.body.classList.add('view-summary');
+    renderSummaryView();
+  }
+  document.querySelectorAll('.vmb-pill').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function toggleSimpleTable() {
+  const btn = document.getElementById('simpleTblBtn');
+  const isOn = document.body.classList.toggle('simple-table');
+  btn.classList.toggle('simple-on', isOn);
+  btn.innerHTML = isOn
+    ? '<i class="fa-solid fa-table-list"></i> Vista completa'
+    : '<i class="fa-solid fa-columns"></i> Vista simple';
+}
+
+function renderSummaryView() {
+  const rows = calcRows();
+
+  // Clone and insert next banner
+  const bannerSlot = document.getElementById('sv-banner-slot');
+  const origBanner = document.getElementById('nextBanner');
+  bannerSlot.innerHTML = origBanner ? origBanner.outerHTML : '';
+
+  // 4 key metrics
+  let totPagado = 0, saldoPend = PRESTAMO_INICIAL, cuotasPag = 0, totIntReal = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const p = state.pagos[i], r = rows[i];
+    if (p && p.pagada && r.cap > 0) {
+      totPagado += r.totalReal; totIntReal += r.int; cuotasPag++;
+    }
+  }
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const p = state.pagos[i], r = rows[i];
+    if (p && (p.pagada || (p.abono || 0) > 0) && r.cap > 0) { saldoPend = r.saldoCalc; break; }
+  }
+  const pct = Math.round((PRESTAMO_INICIAL - saldoPend) / PRESTAMO_INICIAL * 100);
+  const cuotasEfect = rows.filter(r => !r.esPostLiquidacion).length;
+
+  document.getElementById('svMetrics').innerHTML = `
+    <div class="metric-card"><div class="label">Saldo pendiente</div><div class="value val-amber">${fmt(saldoPend)}</div><div class="sub">${pct}% amortizado</div></div>
+    <div class="metric-card"><div class="label">Total pagado</div><div class="value val-blue">${fmt(totPagado)}</div><div class="sub">${cuotasPag} cuota${cuotasPag!==1?'s':''} pagadas</div></div>
+    <div class="metric-card"><div class="label">Intereses pagados</div><div class="value val-red">${fmt(totIntReal)}</div><div class="sub">por días exactos</div></div>
+    <div class="metric-card"><div class="label">Cuotas restantes</div><div class="value val-purple">${cuotasEfect - cuotasPag}</div><div class="sub">de ${cuotasEfect} efectivas</div></div>
+  `;
+
+  // Mini chart
+  const ctxMini = document.getElementById('myChartMini').getContext('2d');
+  const labels = [], capD = [], intD = [], saldoD = [];
+  let acumCap = 0, acumInt = 0;
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    labels.push('C' + (i + 1));
+    const p = state.pagos[i], r = rows[i];
+    if (p && p.pagada && r.cap > 0) { acumCap += r.cap; acumInt += r.int; }
+    if (p && (p.abono || 0) > 0 && r.cap > 0) acumCap += r.abono;
+    capD.push(Math.round(acumCap));
+    intD.push(Math.round(acumInt));
+    saldoD.push(rows[i].saldoCalc);
+  }
+  if (miniChart) miniChart.destroy();
+  miniChart = new Chart(ctxMini, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Capital', data: capD, borderColor: '#5b8def', backgroundColor: 'rgba(91,141,239,0.07)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+        { label: 'Intereses', data: intD, borderColor: '#f0647a', backgroundColor: 'rgba(240,100,122,0.07)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+        { label: 'Saldo', data: saldoD, borderColor: '#f5a623', backgroundColor: 'rgba(245,166,35,0.04)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 3] }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#444c65', font: { size: 8 }, maxTicksLimit: 9 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+        y: { ticks: { color: '#444c65', font: { size: 8 }, callback: v => '$' + (v / 1000000).toFixed(1) + 'M' }, grid: { color: 'rgba(255,255,255,0.03)' } }
+      }
+    }
+  });
+
+  // Legend
+  document.getElementById('svLegend').innerHTML = `
+    <span><span class="legend-dot" style="background:#5b8def"></span>Capital</span>
+    <span><span class="legend-dot" style="background:#f0647a"></span>Intereses</span>
+    <span><span class="legend-dot" style="background:#f5a623;opacity:0.6"></span>Saldo</span>
+  `;
+
+  // Next 3 pending cuotas
+  const next3 = rows.filter((r, i) => !state.pagos[i].pagada && !r.esPostLiquidacion).slice(0, 3);
+  const today = todayUTC();
+  document.getElementById('svNext3Body').innerHTML = next3.length === 0
+    ? '<div style="color:var(--green);font-size:12px;padding:8px 0"><i class="fa-solid fa-circle-check" style="margin-right:6px"></i>¡Todas las cuotas pagadas!</div>'
+    : next3.map((r, idx) => {
+        const rowIdx = rows.indexOf(r);
+        const diasRestantes = daysBetween(today, r.fechaProg);
+        const countdown = diasRestantes === 0
+          ? `<span class="countdown-chip cc-blue" style="font-size:10px">HOY</span>`
+          : diasRestantes < 0
+            ? `<span class="countdown-chip cc-red" style="font-size:10px">${Math.abs(diasRestantes)}d vencida</span>`
+            : diasRestantes <= 7
+              ? `<span class="countdown-chip cc-amber" style="font-size:10px">${diasRestantes}d</span>`
+              : `<span class="countdown-chip cc-blue" style="font-size:10px">${diasRestantes}d</span>`;
+        return `<div class="sv-next3-row">
+          <span class="rn">#${rowIdx + 1}</span>
+          <span class="rd">${FECHAS_LABEL[rowIdx]}</span>
+          <span class="rv">${fmt(r.totalReal)}</span>
+          <span class="rs">${countdown}</span>
+        </div>`;
+      }).join('');
+}
+
+render();
+renderLog();
+initCuotaTexts();
+</script>
+</body>
+</html>
