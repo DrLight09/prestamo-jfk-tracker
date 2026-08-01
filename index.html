@@ -1201,9 +1201,12 @@ const AMORT_BANCO = [
 ];
 
 // ── FIREBASE SYNC ────────────────────────────────────────────────────────────
-// 1) Pega aquí el mismo firebaseConfig que usas en mis-finanzas (index.html,
-//    busca "firebaseConfig"). El apiKey de cliente no es secreto, la seguridad
-//    real la dan las reglas de Firestore + el UID del dueño más abajo.
+// Cualquiera que abra el link sincroniza datos (lectura y escritura a nivel
+// de Firestore), pero la interfaz solo permite editar si se desbloquea con
+// el PIN (ver sección PIN LOCK más abajo). Esto protege contra ediciones
+// accidentales de un visitante casual, no contra alguien decidido a forzar
+// la consola del navegador — si necesitas esa protección más fuerte, se
+// puede volver a un esquema con login real.
 const firebaseConfig = {
   apiKey: "AIzaSyCvx24knPndHDHjyjaz_NT_9Vea0Wr0aFY",
   authDomain: "prestamo-jfk-tracker.firebaseapp.com",
@@ -1213,16 +1216,9 @@ const firebaseConfig = {
   appId: "1:543617739601:web:0eb6dfadde9228fa988170"
 };
 
-// 2) Primera vez: deja esto como 'PENDIENTE'. Abre la página TÚ primero,
-//    verás un aviso en pantalla con tu UID. Cópialo, pégalo aquí abajo Y en
-//    las reglas de Firestore (ver instrucciones), y vuelve a publicar.
-const OWNER_UID = 'ELyYKrPesohUX3BqvjOaXLvaYRF3';
-
 const FS_DOC_PATH = ['prestamoJFK', 'data']; // colección/documento en Firestore
 
 let fbApp = null, fbAuth = null, fbDb = null;
-let isOwner = false;
-let fbReady = false;
 let _applyingRemote = false; // evita que el listener re-dispare saveState()
 
 function fbConfigured() {
@@ -1245,40 +1241,8 @@ function initFirebaseSync() {
 
   fbAuth.onAuthStateChanged(user => {
     if (!user) return;
-    isOwner = (OWNER_UID !== 'PENDIENTE' && user.uid === OWNER_UID);
-
-    if (OWNER_UID === 'PENDIENTE') {
-      // Modo de arranque: mostramos el UID para que lo copies una sola vez.
-      showToast('Config pendiente — tu UID es: ' + user.uid + ' (cópialo, ver consola)', 'warn', 15000);
-      console.log('%cTU UID DE FIREBASE (cópialo en OWNER_UID y en las reglas de Firestore):', 'color:#5b8def;font-weight:bold', user.uid);
-      isOwner = true; // te tratamos como dueño mientras terminas de configurar
-    }
-
-    applyReadOnlyFromOwnership();
     attachFirestoreListener();
   });
-}
-
-function applyReadOnlyFromOwnership() {
-  if (isOwner) {
-    readOnly = false;
-    document.body.classList.remove('readonly-mode');
-    const btn = document.getElementById('btnReadOnly');
-    if (btn) {
-      btn.disabled = false;
-      btn.title = 'Bloquea todas las ediciones para evitar cambios accidentales';
-    }
-  } else {
-    readOnly = true;
-    document.body.classList.add('readonly-mode');
-    const btn = document.getElementById('btnReadOnly');
-    if (btn) {
-      btn.disabled = true;
-      btn.title = 'Vista compartida de solo lectura';
-    }
-    const banner = document.getElementById('readonlyBanner');
-    if (banner) banner.style.display = 'block';
-  }
 }
 
 function attachFirestoreListener() {
@@ -1286,8 +1250,8 @@ function attachFirestoreListener() {
   const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
   ref.onSnapshot(snap => {
     if (!snap.exists) {
-      // No hay nada remoto todavía: si somos el dueño, subimos lo que haya local.
-      if (isOwner) pushStateToFirestore();
+      // No hay nada remoto todavía: subimos lo que haya local para inicializar.
+      pushStateToFirestore();
       return;
     }
     const remote = snap.data();
@@ -1308,7 +1272,7 @@ function attachFirestoreListener() {
 }
 
 function pushStateToFirestore() {
-  if (!fbDb || !isOwner || _applyingRemote) return;
+  if (!fbDb || _applyingRemote) return;
   const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
   ref.set({
     state: state,
@@ -3308,13 +3272,21 @@ function clearLog() {
 }
 
 // ── READ-ONLY MODE ────────────────────────────────────────────────────────────
-// Arranca SIEMPRE bloqueado hasta que Firebase confirme si sos el dueño.
-// Así no hay ni un instante en que un visitante pueda editar antes de que
-// la autenticación anónima resuelva quién es quién.
+// Arranca SIEMPRE bloqueado. Para editar hace falta el PIN (solo tú lo sabes).
+const EDIT_PIN = '2927';
 let readOnly = true;
 document.body.classList.add('readonly-mode');
 
 function toggleReadOnly() {
+  if (readOnly) {
+    // Va a desbloquear: pide el PIN primero.
+    const entered = prompt('PIN para desbloquear edición:');
+    if (entered === null) return; // canceló
+    if (entered !== EDIT_PIN) {
+      showToast('PIN incorrecto', 'error', 3000);
+      return;
+    }
+  }
   readOnly = !readOnly;
   document.body.classList.toggle('readonly-mode', readOnly);
   const btn   = document.getElementById('btnReadOnly');
