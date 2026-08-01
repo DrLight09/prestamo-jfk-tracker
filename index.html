@@ -370,6 +370,11 @@ body.readonly-mode .abono-modal-overlay {
   pointer-events: none !important;
   opacity: 0.35 !important;
 }
+body.readonly-mode #pinModalOverlay,
+body.readonly-mode #pinModalOverlay * {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
 .btnReadOnly {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 13px; border-radius: 20px; border: 1px solid var(--border2);
@@ -1096,6 +1101,26 @@ body.view-summary .full-view { display: none; }
     <div class="abono-modal-btns">
       <button type="button" class="btn btn-ghost" id="btnCloseAbonoModal">Cancelar</button>
       <button type="button" class="btn btn-success" id="btnSaveAbonoModal"><i class="fa-solid fa-check"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="abono-modal-overlay" id="pinModalOverlay" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
+  <div class="abono-modal-box">
+    <div class="abono-modal-header">
+      <div class="abono-modal-icon"><i class="fa-solid fa-lock"></i></div>
+      <div>
+        <div class="abono-modal-title" id="pinModalTitle">Desbloquear edición</div>
+        <div class="abono-modal-sub">Ingresa el PIN para poder editar</div>
+      </div>
+    </div>
+    <input type="password" inputmode="numeric" class="abono-modal-input" id="pinModalInput" placeholder="PIN" autocomplete="off">
+    <div id="pinModalError" style="display:none;font-size:11.5px;color:var(--red);margin:-6px 0 10px;">
+      <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i>PIN incorrecto, intenta de nuevo
+    </div>
+    <div class="abono-modal-btns">
+      <button type="button" class="btn btn-ghost" id="btnClosePinModal">Cancelar</button>
+      <button type="button" class="btn btn-success" id="btnSubmitPinModal"><i class="fa-solid fa-unlock"></i> Desbloquear</button>
     </div>
   </div>
 </div>
@@ -2984,6 +3009,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnCloseAbonoModal').addEventListener('click', closeAbonoModal);
   document.getElementById('btnSaveAbonoModal').addEventListener('click', saveAbonoModal);
 
+  // ── PIN modal ─────────────────────────────────────────────────────────────
+  document.getElementById('btnClosePinModal').addEventListener('click', closePinModal);
+  document.getElementById('btnSubmitPinModal').addEventListener('click', submitPinModal);
+  document.getElementById('pinModalInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitPinModal();
+    if (e.key === 'Escape') closePinModal();
+  });
+
   // ── View mode pills ───────────────────────────────────────────────────────
   document.getElementById('vmb-summary').addEventListener('click', function() {
     setViewMode('summary', this);
@@ -3279,21 +3312,18 @@ document.body.classList.add('readonly-mode');
 
 function toggleReadOnly() {
   if (readOnly) {
-    // Va a desbloquear: pide el PIN primero.
-    const entered = prompt('PIN para desbloquear edición:');
-    if (entered === null) return; // canceló
-    if (entered !== EDIT_PIN) {
-      showToast('PIN incorrecto', 'error', 3000);
-      return;
-    }
+    openPinModal();
+  } else {
+    _setReadOnly(true);
   }
-  readOnly = !readOnly;
+}
+
+function _setReadOnly(value) {
+  readOnly = value;
   document.body.classList.toggle('readonly-mode', readOnly);
   const btn   = document.getElementById('btnReadOnly');
   const icon  = document.getElementById('roIcon');
   const label = document.getElementById('roLabel');
-  // Block keyboard access too, not just pointer events
-  const interactiveSelectors = 'input:not(#btnReadOnly *), select, textarea, [data-toggle-pago], [data-abono-modal], [data-gmf]';
   document.querySelectorAll('tbody input, tbody select, tbody textarea').forEach(el => {
     if (readOnly) { el.setAttribute('tabindex', '-1'); el.setAttribute('disabled', ''); }
     else { el.removeAttribute('tabindex'); el.removeAttribute('disabled'); }
@@ -3310,6 +3340,31 @@ function toggleReadOnly() {
     label.textContent = 'Solo lectura';
     showToast('Edición desbloqueada', 'success', 2500);
     addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
+  }
+}
+
+function openPinModal() {
+  const overlay = document.getElementById('pinModalOverlay');
+  const input = document.getElementById('pinModalInput');
+  const err = document.getElementById('pinModalError');
+  err.style.display = 'none';
+  input.value = '';
+  overlay.classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+function closePinModal() {
+  document.getElementById('pinModalOverlay').classList.remove('open');
+}
+function submitPinModal() {
+  const input = document.getElementById('pinModalInput');
+  const err = document.getElementById('pinModalError');
+  if (input.value === EDIT_PIN) {
+    closePinModal();
+    _setReadOnly(false);
+  } else {
+    err.style.display = 'block';
+    input.value = '';
+    input.focus();
   }
 }
 
