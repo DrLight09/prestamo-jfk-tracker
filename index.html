@@ -1,21 +1,33 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tracker Préstamo — Cooperativa JFK</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1118'/><text y='68' x='50' text-anchor='middle' font-size='62' font-family='sans-serif' fill='%235b8def'>$</text></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<!-- Firebase (mismo proyecto que mis-finanzas) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<style>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Préstamo — Cooperativa JFK</title>
+    <link rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1118'/><text y='68' x='50' text-anchor='middle' font-size='62' font-family='sans-serif' fill='%235b8def'>$</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Firebase (mismo proyecto que mis-finanzas) -->
+    <script
+      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script
+      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script
+      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <style>
 :root {
   --bg:#090b10; --bg2:#0e1118; --bg3:#141720; --bg4:#1a1e28; --bg5:#20242f;
   --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.1); --border3:rgba(255,255,255,0.16);
@@ -121,6 +133,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
 /* TOP ROW */
 .top-row{display:grid;grid-template-columns:1fr 380px;gap:14px;margin-bottom:16px;align-items:start;}
+.top-row>.card{min-width:0;}
 @media(max-width:900px){.top-row{grid-template-columns:1fr;}}
 .card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);padding:18px 20px;}
 .card-title{font-size:10px;font-weight:600;color:var(--text3);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;}
@@ -597,7 +610,7 @@ body.readonly-mode #tab-log {
   td[data-label="Fecha"] { grid-area: fecha; align-self: start; font-size: 11.5px; color: var(--text2); }
 
   td[data-label="Estado"] {
-    grid-area: badge; display: flex; flex-direction: column; align-items: flex-end;
+    grid-area: badge; display: flex; flex-direction: row; align-items: flex-end;
     justify-content: center; gap: 4px;
   }
   td[data-label="Estado"] .status-badge { margin-left: 0 !important; }
@@ -767,474 +780,676 @@ body.view-summary .full-view { display: none; }
   .num,.saldo-cell,.int-real{color:inherit!important;}
 }
 </style>
-</head>
-<body>
-<!-- READ-ONLY BANNER -->
-<div class="readonly-banner" id="readonlyBanner">
-  <i class="fa-solid fa-lock" style="margin-right:6px;font-size:10px"></i>
-  Modo solo lectura activado — las ediciones están bloqueadas. Haz clic en <strong><i class="fa-solid fa-lock" style="font-size:10px;margin-right:2px"></i> Solo lectura</strong> para desbloquear.
-</div>
-
-<!-- GLOBAL TOAST -->
-<div id="globalToast" role="status" aria-live="polite">
-  <span class="gt-icon" id="gtIcon"></span>
-  <span class="gt-msg" id="gtMsg"></span>
-</div>
-
-<div class="page">
-
-<!-- HEADER -->
-<div class="site-header">
-  <div class="header-left">
-    <h1>Préstamo <span>·</span> Cooperativa JFK</h1>
-    <p>Inicio: 12 mar 2026 · Primera cuota: 1 may 2026 · Interés diario = <span id="headerDailyRate">$21.050.000 × 21% ÷ 360 = $12.279/día</span></p>
-  </div>
-  <div class="header-badge">
-    <span class="pill pill-blue">$21.050.000 COP</span>
-    <span class="pill pill-amber">1,75% mensual</span>
-    <span class="pill pill-green" id="pillPlazo">36 meses</span>
-    <span class="pill pill-purple">21% NAMV</span>
-  </div>
-</div>
-
-<!-- VIEW MODE BAR -->
-<div class="view-mode-bar">
-  <span class="vmb-label"><i class="fa-solid fa-eye" aria-hidden="true" style="margin-right:5px;color:var(--blue)"></i>Modo de vista</span>
-  <div class="vmb-pills">
-    <button type="button" class="vmb-pill" id="vmb-summary">
-      <i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Resumen
-    </button>
-    <button type="button" class="vmb-pill active" id="vmb-full">
-      <i class="fa-solid fa-table-list" aria-hidden="true"></i> Completa
-    </button>
-  </div>
-</div>
-
-<!-- SUMMARY VIEW -->
-<div class="summary-view" id="summaryView">
-  <!-- reuses the same next-banner from full-view, cloned by JS -->
-  <div id="sv-banner-slot"></div>
-  <div class="sv-grid" id="svMetrics"></div>
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">Capital vs. Intereses · vista compacta</div>
-    <div class="sv-chart-mini"><canvas id="myChartMini"></canvas></div>
-    <div class="chart-legend" id="svLegend"></div>
-  </div>
-  <div class="sv-next3" id="svNext3">
-    <div class="sv-next3-title"><i class="fa-solid fa-calendar-days" style="margin-right:5px;color:var(--blue)"></i>Próximas 3 cuotas</div>
-    <div id="svNext3Body"></div>
-  </div>
-  <button type="button" class="sv-expand-btn" id="svExpandBtn">
-    <i class="fa-solid fa-table-list"></i> Ver tabla completa y herramientas
-    <i class="fa-solid fa-chevron-right" style="font-size:10px;margin-left:2px"></i>
-  </button>
-</div>
-
-<!-- FULL VIEW -->
-<div class="full-view">
-
-<!-- ALERT -->
-<div class="alert alert-warn" id="alertBox"><i class="fa-solid fa-triangle-exclamation"></i> El valor pagado es menor a la cuota programada. Verifica con la cooperativa el tratamiento del faltante.</div>
-
-<!-- NEXT PAYMENT BANNER -->
-<div class="next-banner upcoming" id="nextBanner">
-  <div class="nb-left">
-    <div class="nb-icon" id="nbIcon"><i class="fa-regular fa-calendar-days"></i></div>
-    <div>
-      <div class="nb-label">Próxima cuota</div>
-      <div class="nb-title" id="nbTitle">Cargando...</div>
-      <div class="nb-sub" id="nbSub"></div>
-    </div>
-  </div>
-  <div class="nb-right">
-    <div class="nb-stat">
-      <div class="ns-label">Monto estimado</div>
-      <div class="ns-val val-amber" id="nbMonto">—</div>
-    </div>
-    <div class="nb-stat">
-      <div class="ns-label">Interés del período</div>
-      <div class="ns-val val-red" id="nbInteres">—</div>
-    </div>
-    <div id="nbCountdown"></div>
-  </div>
-</div>
-
-<!-- TICKER -->
-<div class="interest-ticker">
-  <div class="ticker-group">
-    <div>
-      <div class="ticker-label">Saldo capital hoy</div>
-      <div class="ticker-main val-blue" id="tickerSaldo">$21.050.000</div>
-      <div class="ticker-sub" id="tickerSaldoSub">Sin pagos registrados</div>
-    </div>
-    <div>
-      <div class="ticker-label">Interés acumulado desde último pago</div>
-      <div class="ticker-main val-red" id="tickerIntHoy">$0</div>
-      <div class="ticker-sub" id="tickerIntSub">—</div>
-    </div>
-    <div>
-      <div class="ticker-label">Deuda total hoy (capital + interés)</div>
-      <div class="ticker-main val-amber" id="tickerDeudaHoy">$21.050.000</div>
-      <div class="ticker-sub" id="tickerDeudaSub">Actualizado a hoy</div>
-    </div>
-    <div>
-      <div class="ticker-label">Total intereses reales pagados</div>
-      <div class="ticker-main" style="color:var(--text2)" id="tickerIntPagado">$0</div>
-      <div class="ticker-sub">por días exactos</div>
-    </div>
-  </div>
-  <div class="daily-rate-badge">
-    <div>
-      <div class="rate-val" id="dailyRateBadge">$12.279</div>
-      <div class="rate-desc" id="dailyRateDesc">por día<br>de interés</div>
-    </div>
-  </div>
-</div>
-
-<!-- SAVINGS BANNER -->
-<div class="savings-banner neutral" id="savingsBanner">
-  <div class="savings-main">
-    <div class="savings-icon"><i class="fa-solid fa-chart-line"></i></div>
-    <div>
-      <div class="savings-title" id="savingsTitle">Sin pagos registrados</div>
-      <div class="savings-amount" id="savingsAmount"></div>
-      <div class="savings-desc" id="savingsDesc">Registra fechas reales de pago para ver cuánto ahorras o pagas de más</div>
-    </div>
-  </div>
-  <div class="savings-stats" id="savingsStats"></div>
-</div>
-
-<!-- METRICS -->
-<div class="metrics-grid" id="metricsGrid"></div>
-
-<!-- PROGRESS -->
-<div class="progress-block">
-  <div class="progress-header">
-    <span>Progreso del préstamo</span>
-    <strong id="pctLabel">0%</strong>
-  </div>
-  <div class="track"><div class="fill" id="progFill" style="width:0%"></div></div>
-  <div class="progress-info">
-    <span>$0</span>
-    <span id="progPaid">Capital pagado: $0</span>
-    <span>$21.050.000</span>
-  </div>
-</div>
-
-<!-- CHART + PANEL -->
-<div class="top-row">
-  <div class="card">
-    <div class="card-title">Capital vs. Intereses reales acumulados · Saldo proyectado</div>
-    <div class="chart-wrap"><canvas id="myChart" role="img" aria-label="Gráfica de capital pagado, intereses reales y saldo restante"></canvas></div>
-    <div class="chart-legend">
-      <span><span class="legend-dot" style="background:#5b8def"></span>Capital pagado</span>
-      <span><span class="legend-dot" style="background:#f0647a"></span>Intereses reales</span>
-      <span><span class="legend-dot" style="background:#2dd4a0"></span>Ahorro acumulado</span>
-      <span><span class="legend-dot" style="background:#f5a623;opacity:0.6"></span>Saldo restante</span>
-    </div>
-  </div>
-  <div class="card">
-    <div class="tabs" role="tablist" aria-label="Herramientas">
-      <button type="button" class="tab active" data-tab="abono" role="tab" aria-selected="true" aria-controls="tab-abono" id="tabtrigger-abono">Abono capital</button>
-      <button type="button" class="tab" data-tab="hoy" role="tab" aria-selected="false" aria-controls="tab-hoy" id="tabtrigger-hoy">¿Cuánto debo hoy?</button>
-      <button type="button" class="tab" data-tab="verificacion" role="tab" aria-selected="false" aria-controls="tab-verificacion" id="tabtrigger-verificacion">Verificación banco</button>
-      <button type="button" class="tab" data-tab="log" role="tab" aria-selected="false" aria-controls="tab-log" id="tabtrigger-log">Log</button>
+  </head>
+  <body>
+    <!-- READ-ONLY BANNER -->
+    <div class="readonly-banner" id="readonlyBanner">
+      <i class="fa-solid fa-lock" style="margin-right:6px;font-size:10px"></i>
+      Modo solo lectura activado — las ediciones están bloqueadas. Haz clic en
+      <strong><i class="fa-solid fa-lock"
+          style="font-size:10px;margin-right:2px"></i> Solo lectura</strong>
+      para desbloquear.
     </div>
 
-    <!-- TAB ABONO -->
-    <div class="tab-panel active" id="tab-abono" role="tabpanel" aria-labelledby="tabtrigger-abono">
-      <div class="payment-panel">
-        <div class="panel-section" style="border:none;padding:0">
-          <div class="panel-section-title">Abono extra a capital</div>
-          <div class="field-group">
-            <label class="field-label" for="abonoCuota">Antes de la cuota #</label>
-            <select id="abonoCuota"><option value="">Selecciona cuota...</option></select>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="abonoValor">Valor del abono ($)</label>
-            <input type="number" id="abonoValor" placeholder="Mín. ..." min="0">
-            <div id="abonoValorFmt" style="font-size:10px;color:var(--blue);font-family:var(--mono);margin-top:3px;min-height:14px;transition:opacity 0.2s;"></div>
-            <div id="abonoMinHint" class="hint-box">
-              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true" style="margin-right:4px"></i><span id="abonoMinHintText">Mínimo: ... (cuota + 50%)</span>
-            </div>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="abonoFecha">Fecha real del abono <span class="color-text3 fw-400 fz-10">(opcional)</span></label>
-            <input type="date" id="abonoFecha">
-            <div class="info-box"><i class="fa-solid fa-circle-info color-blue" style="margin-right:3px"></i>El abono se registra en la cuota seleccionada. Puedes anotar el día exacto del pago. Debe estar entre el 12 mar 2026 y hoy (no se permiten fechas futuras).</div>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6;padding:6px 9px;background:var(--bg4);border-radius:6px;border:1px solid var(--border)">
-            <i class="fa-solid fa-info-circle" style="color:var(--blue);margin-right:4px"></i>
-            <span id="abonoReglaText"></span>
-          </div>
-          <div class="abono-impact" id="abonoImpact">
-            <div class="impact-title">Impacto del abono</div>
-            <div id="abonoImpactBody"></div>
-          </div>
-          <button type="button" class="btn btn-primary" id="btnAplicarAbono" style="margin-top:8px">Aplicar abono a capital</button>
+    <!-- GLOBAL TOAST -->
+    <div id="globalToast" role="status" aria-live="polite">
+      <span class="gt-icon" id="gtIcon"></span>
+      <span class="gt-msg" id="gtMsg"></span>
+    </div>
+
+    <div class="page">
+
+      <!-- HEADER -->
+      <div class="site-header">
+        <div class="header-left">
+          <h1>Préstamo <span>·</span> Cooperativa JFK</h1>
+          <p>Inicio: 12 mar 2026 · Primera cuota: 1 may 2026 · Interés diario =
+            <span id="headerDailyRate">$21.050.000 × 21% ÷ 360 =
+              $12.279/día</span></p>
         </div>
-        <div class="panel-section">
-          <div class="btn-row">
-            <button type="button" class="btn btn-ghost" id="btnExportCSV"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
-            <button type="button" class="btn btn-danger" id="btnResetAll">Reiniciar todo</button>
-          </div>
-          <div id="roSlotAbono" style="margin-top:7px">
-            <button type="button" class="btn btn-readonly-toggle" id="btnReadOnly" title="Bloquea todas las ediciones para evitar cambios accidentales">
-              <i class="fa-solid fa-lock" id="roIcon"></i> <span id="roLabel">Solo lectura</span>
-            </button>
-          </div>
-          <button type="button" class="btn btn-ghost" id="btnExportImage" style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
-            <i class="fa-solid fa-image"></i> Exportar resumen como imagen
-          </button>
-          <button type="button" class="btn btn-ghost" id="btnRunTests" style="margin-top:7px;width:100%;background:rgba(45,212,160,0.05);color:var(--green);border-color:rgba(45,212,160,0.2);" title="Ejecuta la suite de tests financieros y muestra el resultado">
-            <i class="fa-solid fa-flask"></i> Verificar cálculos (tests)
-          </button>
+        <div class="header-badge">
+          <span class="pill pill-blue">$21.050.000 COP</span>
+          <span class="pill pill-amber">1,75% mensual</span>
+          <span class="pill pill-green" id="pillPlazo">36 meses</span>
+          <span class="pill pill-purple">21% NAMV</span>
+        </div>
+      </div>
 
-          <!-- BACKUP SECTION -->
-          <div class="backup-section">
-            <div class="backup-section-title"><i class="fa-solid fa-floppy-disk"></i> Copias de seguridad</div>
-            <div class="backup-btns">
-              <button type="button" class="btn-backup-export" id="btnExportBackup"><i class="fa-solid fa-cloud-arrow-down"></i> Guardar backup</button>
-              <button type="button" class="btn-backup-import" id="btnImportBackup"><i class="fa-solid fa-cloud-arrow-up"></i> Restaurar backup</button>
-            </div>
-            <input type="file" id="importFileInput" accept=".json" style="display:none">
-            <div class="backup-toast" id="backupToast"></div>
-            <div class="backup-info">
-              El backup guarda <span style="color:var(--text2)">todos tus pagos, fechas, abonos y notas</span> en un archivo .json.<br>
-              Restaura el archivo cuando cambies de dispositivo o navegador.
+      <!-- VIEW MODE BAR -->
+      <div class="view-mode-bar">
+        <span class="vmb-label"><i class="fa-solid fa-eye" aria-hidden="true"
+            style="margin-right:5px;color:var(--blue)"></i>Modo de vista</span>
+        <div class="vmb-pills">
+          <button type="button" class="vmb-pill" id="vmb-summary">
+            <i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Resumen
+          </button>
+          <button type="button" class="vmb-pill active" id="vmb-full">
+            <i class="fa-solid fa-table-list" aria-hidden="true"></i> Completa
+          </button>
+        </div>
+      </div>
+
+      <!-- SUMMARY VIEW -->
+      <div class="summary-view" id="summaryView">
+        <!-- reuses the same next-banner from full-view, cloned by JS -->
+        <div id="sv-banner-slot"></div>
+        <div class="sv-grid" id="svMetrics"></div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Capital vs. Intereses · vista compacta</div>
+          <div class="sv-chart-mini"><canvas id="myChartMini"></canvas></div>
+          <div class="chart-legend" id="svLegend"></div>
+        </div>
+        <div class="sv-next3" id="svNext3">
+          <div class="sv-next3-title"><i class="fa-solid fa-calendar-days"
+              style="margin-right:5px;color:var(--blue)"></i>Próximas 3
+            cuotas</div>
+          <div id="svNext3Body"></div>
+        </div>
+        <button type="button" class="sv-expand-btn" id="svExpandBtn">
+          <i class="fa-solid fa-table-list"></i> Ver tabla completa y
+          herramientas
+          <i class="fa-solid fa-chevron-right"
+            style="font-size:10px;margin-left:2px"></i>
+        </button>
+      </div>
+
+      <!-- FULL VIEW -->
+      <div class="full-view">
+
+        <!-- ALERT -->
+        <div class="alert alert-warn" id="alertBox"><i
+            class="fa-solid fa-triangle-exclamation"></i> El valor pagado es
+          menor a la cuota programada. Verifica con la cooperativa el
+          tratamiento del faltante.</div>
+
+        <!-- NEXT PAYMENT BANNER -->
+        <div class="next-banner upcoming" id="nextBanner">
+          <div class="nb-left">
+            <div class="nb-icon" id="nbIcon"><i
+                class="fa-regular fa-calendar-days"></i></div>
+            <div>
+              <div class="nb-label">Próxima cuota</div>
+              <div class="nb-title" id="nbTitle">Cargando...</div>
+              <div class="nb-sub" id="nbSub"></div>
             </div>
           </div>
-
-          <!-- COLLAPSIBLE INFO NOTE -->
-          <div class="info-note">
-            <div class="info-note-toggle" title="Ver/ocultar explicación de fórmulas">
-              <i class="fa-solid fa-book-open" style="color:var(--blue);font-size:10px"></i>
-              <span class="int-label" style="color:var(--text3)">Cómo se calculan los intereses</span>
-              <i class="fa-solid fa-chevron-down int-icon"></i>
+          <div class="nb-right">
+            <div class="nb-stat">
+              <div class="ns-label">Monto estimado</div>
+              <div class="ns-val val-amber" id="nbMonto">—</div>
             </div>
-            <div class="info-note-body">
-              <div style="padding-top:8px">
-                <span>Fórmula interés diario:</span> saldo × 21% ÷ 360<br>
-                <span>Interés por período:</span> siempre sobre los días programados del período.<br>
-                El banco cobra el período completo sin importar si pagás antes o después.<br>
-                <span style="color:var(--green)">El ahorro real viene de abonos a capital</span>, que reducen el saldo base de los siguientes períodos.<br>
-                <span>Sin penalidad por prepago</span> (cláusula 2)
+            <div class="nb-stat">
+              <div class="ns-label">Interés del período</div>
+              <div class="ns-val val-red" id="nbInteres">—</div>
+            </div>
+            <div id="nbCountdown"></div>
+          </div>
+        </div>
+
+        <!-- TICKER -->
+        <div class="interest-ticker">
+          <div class="ticker-group">
+            <div>
+              <div class="ticker-label">Saldo capital hoy</div>
+              <div class="ticker-main val-blue"
+                id="tickerSaldo">$21.050.000</div>
+              <div class="ticker-sub" id="tickerSaldoSub">Sin pagos
+                registrados</div>
+            </div>
+            <div>
+              <div class="ticker-label">Interés acumulado desde último
+                pago</div>
+              <div class="ticker-main val-red" id="tickerIntHoy">$0</div>
+              <div class="ticker-sub" id="tickerIntSub">—</div>
+            </div>
+            <div>
+              <div class="ticker-label">Deuda total hoy (capital +
+                interés)</div>
+              <div class="ticker-main val-amber"
+                id="tickerDeudaHoy">$21.050.000</div>
+              <div class="ticker-sub" id="tickerDeudaSub">Actualizado a
+                hoy</div>
+            </div>
+            <div>
+              <div class="ticker-label">Total intereses reales pagados</div>
+              <div class="ticker-main" style="color:var(--text2)"
+                id="tickerIntPagado">$0</div>
+              <div class="ticker-sub">por días exactos</div>
+            </div>
+          </div>
+          <div class="daily-rate-badge">
+            <div>
+              <div class="rate-val" id="dailyRateBadge">$12.279</div>
+              <div class="rate-desc" id="dailyRateDesc">por día<br>de
+                interés</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SAVINGS BANNER -->
+        <div class="savings-banner neutral" id="savingsBanner">
+          <div class="savings-main">
+            <div class="savings-icon"><i
+                class="fa-solid fa-chart-line"></i></div>
+            <div>
+              <div class="savings-title" id="savingsTitle">Sin pagos
+                registrados</div>
+              <div class="savings-amount" id="savingsAmount"></div>
+              <div class="savings-desc" id="savingsDesc">Registra fechas reales
+                de pago para ver cuánto ahorras o pagas de más</div>
+            </div>
+          </div>
+          <div class="savings-stats" id="savingsStats"></div>
+        </div>
+
+        <!-- METRICS -->
+        <div class="metrics-grid" id="metricsGrid"></div>
+
+        <!-- PROGRESS -->
+        <div class="progress-block">
+          <div class="progress-header">
+            <span>Progreso del préstamo</span>
+            <strong id="pctLabel">0%</strong>
+          </div>
+          <div class="track"><div class="fill" id="progFill"
+              style="width:0%"></div></div>
+          <div class="progress-info">
+            <span>$0</span>
+            <span id="progPaid">Capital pagado: $0</span>
+            <span>$21.050.000</span>
+          </div>
+        </div>
+
+        <!-- CHART + PANEL -->
+        <div class="top-row">
+          <div class="card">
+            <div class="card-title">Capital vs. Intereses reales acumulados ·
+              Saldo proyectado</div>
+            <div class="chart-wrap"><canvas id="myChart" role="img"
+                aria-label="Gráfica de capital pagado, intereses reales y saldo restante"></canvas></div>
+            <div class="chart-legend">
+              <span><span class="legend-dot"
+                  style="background:#5b8def"></span>Capital pagado</span>
+              <span><span class="legend-dot"
+                  style="background:#f0647a"></span>Intereses reales</span>
+              <span><span class="legend-dot"
+                  style="background:#2dd4a0"></span>Ahorro acumulado</span>
+              <span><span class="legend-dot"
+                  style="background:#f5a623;opacity:0.6"></span>Saldo
+                restante</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="tabs" role="tablist" aria-label="Herramientas">
+              <button type="button" class="tab active" data-tab="abono"
+                role="tab" aria-selected="true" aria-controls="tab-abono"
+                id="tabtrigger-abono">Abono capital</button>
+              <button type="button" class="tab" data-tab="hoy" role="tab"
+                aria-selected="false" aria-controls="tab-hoy"
+                id="tabtrigger-hoy">¿Cuánto debo hoy?</button>
+              <button type="button" class="tab" data-tab="verificacion"
+                role="tab" aria-selected="false"
+                aria-controls="tab-verificacion"
+                id="tabtrigger-verificacion">Verificación banco</button>
+              <button type="button" class="tab" data-tab="log" role="tab"
+                aria-selected="false" aria-controls="tab-log"
+                id="tabtrigger-log">Log</button>
+            </div>
+
+            <!-- TAB ABONO -->
+            <div class="tab-panel active" id="tab-abono" role="tabpanel"
+              aria-labelledby="tabtrigger-abono">
+              <div class="payment-panel">
+                <div class="panel-section" style="border:none;padding:0">
+                  <div class="panel-section-title">Abono extra a capital</div>
+                  <div class="field-group">
+                    <label class="field-label" for="abonoCuota">Antes de la
+                      cuota #</label>
+                    <select id="abonoCuota"><option value>Selecciona
+                        cuota...</option></select>
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label" for="abonoValor">Valor del abono
+                      ($)</label>
+                    <input type="number" id="abonoValor" placeholder="Mín. ..."
+                      min="0">
+                    <div id="abonoValorFmt"
+                      style="font-size:10px;color:var(--blue);font-family:var(--mono);margin-top:3px;min-height:14px;transition:opacity 0.2s;"></div>
+                    <div id="abonoMinHint" class="hint-box">
+                      <i class="fa-solid fa-triangle-exclamation"
+                        aria-hidden="true" style="margin-right:4px"></i><span
+                        id="abonoMinHintText">Mínimo: ... (cuota + 50%)</span>
+                    </div>
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label" for="abonoFecha">Fecha real del
+                      abono <span
+                        class="color-text3 fw-400 fz-10">(opcional)</span></label>
+                    <input type="date" id="abonoFecha">
+                    <div class="info-box"><i
+                        class="fa-solid fa-circle-info color-blue"
+                        style="margin-right:3px"></i>El abono se registra en la
+                      cuota seleccionada. Puedes anotar el día exacto del pago.
+                      Debe estar entre el 12 mar 2026 y hoy (no se permiten
+                      fechas futuras).</div>
+                  </div>
+                  <div
+                    style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6;padding:6px 9px;background:var(--bg4);border-radius:6px;border:1px solid var(--border)">
+                    <i class="fa-solid fa-info-circle"
+                      style="color:var(--blue);margin-right:4px"></i>
+                    <span id="abonoReglaText"></span>
+                  </div>
+                  <div class="abono-impact" id="abonoImpact">
+                    <div class="impact-title">Impacto del abono</div>
+                    <div id="abonoImpactBody"></div>
+                  </div>
+                  <button type="button" class="btn btn-primary"
+                    id="btnAplicarAbono" style="margin-top:8px">Aplicar abono a
+                    capital</button>
+                </div>
+                <div class="panel-section">
+                  <div class="btn-row">
+                    <button type="button" class="btn btn-ghost"
+                      id="btnExportCSV"><i class="fa-solid fa-file-csv"></i>
+                      Exportar CSV</button>
+                    <button type="button" class="btn btn-danger"
+                      id="btnResetAll">Reiniciar todo</button>
+                  </div>
+                  <div id="roSlotAbono" style="margin-top:7px">
+                    <button type="button" class="btn btn-readonly-toggle"
+                      id="btnReadOnly"
+                      title="Bloquea todas las ediciones para evitar cambios accidentales">
+                      <i class="fa-solid fa-lock" id="roIcon"></i> <span
+                        id="roLabel">Solo lectura</span>
+                    </button>
+                  </div>
+                  <button type="button" class="btn btn-ghost"
+                    id="btnExportImage"
+                    style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
+                    <i class="fa-solid fa-image"></i> Exportar resumen como
+                    imagen
+                  </button>
+                  <button type="button" class="btn btn-ghost" id="btnRunTests"
+                    style="margin-top:7px;width:100%;background:rgba(45,212,160,0.05);color:var(--green);border-color:rgba(45,212,160,0.2);"
+                    title="Ejecuta la suite de tests financieros y muestra el resultado">
+                    <i class="fa-solid fa-flask"></i> Verificar cálculos (tests)
+                  </button>
+
+                  <!-- BACKUP SECTION -->
+                  <div class="backup-section">
+                    <div class="backup-section-title"><i
+                        class="fa-solid fa-floppy-disk"></i> Copias de
+                      seguridad</div>
+                    <div class="backup-btns">
+                      <button type="button" class="btn-backup-export"
+                        id="btnExportBackup"><i
+                          class="fa-solid fa-cloud-arrow-down"></i> Guardar
+                        backup</button>
+                      <button type="button" class="btn-backup-import"
+                        id="btnImportBackup"><i
+                          class="fa-solid fa-cloud-arrow-up"></i> Restaurar
+                        backup</button>
+                    </div>
+                    <input type="file" id="importFileInput" accept=".json"
+                      style="display:none">
+                    <div class="backup-toast" id="backupToast"></div>
+                    <div class="backup-info">
+                      El backup guarda <span style="color:var(--text2)">todos
+                        tus pagos, fechas, abonos y notas</span> en un archivo
+                      .json.<br>
+                      Restaura el archivo cuando cambies de dispositivo o
+                      navegador.
+                    </div>
+                  </div>
+
+                  <!-- COLLAPSIBLE INFO NOTE -->
+                  <div class="info-note">
+                    <div class="info-note-toggle"
+                      title="Ver/ocultar explicación de fórmulas">
+                      <i class="fa-solid fa-book-open"
+                        style="color:var(--blue);font-size:10px"></i>
+                      <span class="int-label" style="color:var(--text3)">Cómo se
+                        calculan los intereses</span>
+                      <i class="fa-solid fa-chevron-down int-icon"></i>
+                    </div>
+                    <div class="info-note-body">
+                      <div style="padding-top:8px">
+                        <span>Fórmula interés diario:</span> saldo × 21% ÷
+                        360<br>
+                        <span>Interés por período:</span> siempre sobre los días
+                        programados del período.<br>
+                        El banco cobra el período completo sin importar si pagás
+                        antes o después.<br>
+                        <span style="color:var(--green)">El ahorro real viene de
+                          abonos a capital</span>, que reducen el saldo base de
+                        los siguientes períodos.<br>
+                        <span>Sin penalidad por prepago</span> (cláusula 2)
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- CUOTA #1 COLLAPSIBLE -->
+                  <div class="info-note" style="margin-top:4px">
+                    <div class="info-note-toggle"
+                      title="Ver/ocultar explicación cuota #1">
+                      <i class="fa-solid fa-circle-question"
+                        style="color:var(--amber);font-size:10px"></i>
+                      <span class="int-label" style="color:var(--text3)">¿Por
+                        qué la cuota #1 es mayor?</span>
+                      <i class="fa-solid fa-chevron-down int-icon"></i>
+                    </div>
+                    <div class="info-note-body">
+                      <div class="cuota1-note" style="margin-top:8px">
+                        <div class="cuota1-icon"><i
+                            class="fa-solid fa-calendar-days"></i></div>
+                        <div class="cuota1-content">
+                          <div class="cuota1-body">
+                            Se cobraron <strong>49 días</strong> de interés en
+                            lugar de los 30 habituales,
+                            porque el desembolso fue el <strong>12 mar</strong>
+                            y el primer pago el <strong>1 may</strong>
+                            — período extendido por convención 30/360.
+                          </div>
+                          <div class="cuota1-chips">
+                            <span class="cuota1-chip chip-amber">$1.030.467
+                              cuota #1</span>
+                            <span class="cuota1-chip chip-muted">vs. $796.233
+                              normal</span>
+                            <span class="cuota1-chip chip-blue">49 días ·
+                              30/360</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- CUOTA #1 COLLAPSIBLE -->
-          <div class="info-note" style="margin-top:4px">
-            <div class="info-note-toggle" title="Ver/ocultar explicación cuota #1">
-              <i class="fa-solid fa-circle-question" style="color:var(--amber);font-size:10px"></i>
-              <span class="int-label" style="color:var(--text3)">¿Por qué la cuota #1 es mayor?</span>
-              <i class="fa-solid fa-chevron-down int-icon"></i>
-            </div>
-            <div class="info-note-body">
-              <div class="cuota1-note" style="margin-top:8px">
-                <div class="cuota1-icon"><i class="fa-solid fa-calendar-days"></i></div>
-                <div class="cuota1-content">
-                  <div class="cuota1-body">
-                    Se cobraron <strong>49 días</strong> de interés en lugar de los 30 habituales,
-                    porque el desembolso fue el <strong>12 mar</strong> y el primer pago el <strong>1 may</strong>
-                    — período extendido por convención 30/360.
+            <!-- TAB CUÁNTO DEBO HOY -->
+            <div class="tab-panel" id="tab-hoy" role="tabpanel"
+              aria-labelledby="tabtrigger-hoy">
+              <div class="payment-panel">
+                <div class="panel-section" style="border:none;padding:0">
+                  <div id="roSlotHoy"></div>
+                  <div class="panel-section-title">Saldo exacto en cualquier
+                    fecha</div>
+                  <div class="field-group">
+                    <label class="field-label" for="fechaConsulta">Consultar
+                      saldo al día</label>
+                    <input type="date" id="fechaConsulta" value>
+                    <div class="info-box"><i
+                        class="fa-solid fa-circle-info color-blue"
+                        style="margin-right:3px"></i>Funciona con <span
+                        style="color:var(--text2)">fechas pasadas</span> (ej.
+                      "¿cuánto debía el 6 de junio?") y también con fechas
+                      futuras.</div>
                   </div>
-                  <div class="cuota1-chips">
-                    <span class="cuota1-chip chip-amber">$1.030.467 cuota #1</span>
-                    <span class="cuota1-chip chip-muted">vs. $796.233 normal</span>
-                    <span class="cuota1-chip chip-blue">49 días · 30/360</span>
+                  <div class="calc-preview visible" id="deudaResult">
+                    <div class="calc-row"><span class="ck">Saldo
+                        capital</span><span class="cv"
+                        id="dr-cap">—</span></div>
+                    <div class="calc-row"><span class="ck">Interés acumulado
+                        (días)</span><span class="cv val-red"
+                        id="dr-int">—</span></div>
+                    <div class="calc-row"><span class="ck">Días desde último
+                        pago/abono</span><span class="cv"
+                        id="dr-dias">—</span></div>
+                    <div class="calc-row total"><span class="ck">Deuda total ese
+                        día</span><span class="cv" id="dr-total">—</span></div>
+                  </div>
+                  <div
+                    style="font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--mono)"><i
+                      class="fa-solid fa-clock-rotate-left"
+                      style="margin-right:4px;color:var(--blue)"></i>Calculado
+                    desde: <span id="dr-base"
+                      style="color:var(--text2)">—</span></div>
+                  <div class="info-note" style="margin-top:9px">Esto muestra
+                    cuánto le debías (o deberás) al banco <span>en cualquier
+                      fecha</span>, usando el saldo real vigente ese día — no el
+                    saldo de hoy — más el interés generado desde el pago o abono
+                    anterior a esa fecha.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB VERIFICACIÓN BANCO -->
+            <div class="tab-panel" id="tab-verificacion" role="tabpanel"
+              aria-labelledby="tabtrigger-verificacion">
+              <div class="payment-panel">
+                <div class="panel-section" style="border:none;padding:0">
+                  <div
+                    style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+                    <div class="panel-section-title"
+                      style="margin-bottom:0">Calc. propio vs. tabla del
+                      banco</div>
+                    <button type="button" class="btn btn-ghost btn-sm"
+                      id="btnSyncBanco"
+                      style="display:flex;align-items:center;gap:5px;font-size:10.5px">
+                      <i class="fa-solid fa-file-arrow-up"
+                        style="font-size:10px"></i> Sincronizar con banco
+                    </button>
+                  </div>
+
+                  <!-- PANEL SINCRONIZAR CON BANCO -->
+                  <div id="syncBancoPanel"
+                    style="display:none;margin-bottom:12px">
+                    <div
+                      style="background:rgba(91,141,239,0.07);border:1px solid rgba(91,141,239,0.2);border-radius:var(--radius);padding:12px 13px;">
+                      <div
+                        style="font-size:10.5px;font-weight:600;color:var(--blue);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                        <i class="fa-solid fa-paste"></i> Pegar tabla del banco
+                        (PDF/Excel)
+                      </div>
+                      <div
+                        style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6">
+                        Copia las columnas <strong
+                          style="color:var(--text2)">Cuota, Capital, Interés,
+                          Saldo</strong> del PDF o Excel del banco y pégalas
+                        aquí. Cada fila en una línea, valores separados por
+                        coma, punto y coma, o Tab.
+                      </div>
+                      <textarea id="syncBancoInput" class="sync-textarea"
+                        placeholder="Ej:
+1, 424691, 601671, 20625309
+2, 432131, 360930, 20193178
+3, 439691, 353370, 19753487
+..."></textarea>
+                      <div class="sync-btn-row">
+                        <button type="button" class="btn btn-primary btn-sm"
+                          id="btnParseSyncBanco" style="flex:1"><i
+                            class="fa-solid fa-check"
+                            style="font-size:10px"></i> Comparar</button>
+                        <button type="button" class="btn btn-ghost btn-sm"
+                          id="btnClearSyncBanco"><i class="fa-solid fa-xmark"
+                            style="font-size:10px"></i> Limpiar</button>
+                      </div>
+                      <div id="syncBancoError" class="sync-error"></div>
+                    </div>
+                  </div>
+
+                  <div
+                    style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">
+                    Compara <span style="color:var(--blue)">AMORT_CALC</span>
+                    (fórmulas francesas puras) con
+                    <span style="color:var(--amber)"
+                      id="bancoSourceLabel">AMORT_BANCO</span> (hardcodeado).
+                    Diferencias <span
+                      style="color:var(--red);font-weight:600">&gt;$5</span> se
+                    resaltan en rojo.
+                  </div>
+                  <div id="verificacionGrid"
+                    style="max-height:300px;overflow-y:auto;font-size:11px;font-family:var(--mono)"></div>
+                  <div
+                    style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"
+                    id="verificacionSummary"></div>
+                </div>
+              </div>
+            </div>
+            <!-- TAB LOG DE CAMBIOS -->
+            <div class="tab-panel" id="tab-log" role="tabpanel"
+              aria-labelledby="tabtrigger-log">
+              <div class="payment-panel">
+                <div class="panel-section" style="border:none;padding:0">
+                  <div
+                    style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+                    <div class="panel-section-title"
+                      style="margin-bottom:0">Historial de cambios</div>
+                    <button type="button" class="btn btn-ghost btn-sm"
+                      id="btnClearLog" style="font-size:10px;opacity:0.7"
+                      title="Borrar historial">
+                      <i class="fa-solid fa-trash" style="font-size:9px"></i>
+                      Limpiar
+                    </button>
+                  </div>
+                  <div
+                    style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                    <div id="logList"></div>
+                  </div>
+                  <div
+                    style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6">
+                    <i class="fa-solid fa-circle-info"
+                      style="color:var(--blue);margin-right:3px"></i>
+                    El log registra todas las acciones realizadas. <span
+                      style="color:var(--green)">Se guarda
+                      automáticamente</span> y persiste entre sesiones. Máximo
+                    200 entradas.
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-
-
-    <!-- TAB CUÁNTO DEBO HOY -->
-    <div class="tab-panel" id="tab-hoy" role="tabpanel" aria-labelledby="tabtrigger-hoy">
-      <div class="payment-panel">
-        <div class="panel-section" style="border:none;padding:0">
-          <div id="roSlotHoy"></div>
-          <div class="panel-section-title">Saldo exacto en cualquier fecha</div>
-          <div class="field-group">
-            <label class="field-label" for="fechaConsulta">Consultar saldo al día</label>
-            <input type="date" id="fechaConsulta" value="">
-            <div class="info-box"><i class="fa-solid fa-circle-info color-blue" style="margin-right:3px"></i>Funciona con <span style="color:var(--text2)">fechas pasadas</span> (ej. "¿cuánto debía el 6 de junio?") y también con fechas futuras.</div>
-          </div>
-          <div class="calc-preview visible" id="deudaResult">
-            <div class="calc-row"><span class="ck">Saldo capital</span><span class="cv" id="dr-cap">—</span></div>
-            <div class="calc-row"><span class="ck">Interés acumulado (días)</span><span class="cv val-red" id="dr-int">—</span></div>
-            <div class="calc-row"><span class="ck">Días desde último pago/abono</span><span class="cv" id="dr-dias">—</span></div>
-            <div class="calc-row total"><span class="ck">Deuda total ese día</span><span class="cv" id="dr-total">—</span></div>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--mono)"><i class="fa-solid fa-clock-rotate-left" style="margin-right:4px;color:var(--blue)"></i>Calculado desde: <span id="dr-base" style="color:var(--text2)">—</span></div>
-          <div class="info-note" style="margin-top:9px">Esto muestra cuánto le debías (o deberás) al banco <span>en cualquier fecha</span>, usando el saldo real vigente ese día — no el saldo de hoy — más el interés generado desde el pago o abono anterior a esa fecha.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB VERIFICACIÓN BANCO -->
-    <div class="tab-panel" id="tab-verificacion" role="tabpanel" aria-labelledby="tabtrigger-verificacion">
-      <div class="payment-panel">
-        <div class="panel-section" style="border:none;padding:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-            <div class="panel-section-title" style="margin-bottom:0">Calc. propio vs. tabla del banco</div>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnSyncBanco" style="display:flex;align-items:center;gap:5px;font-size:10.5px">
-              <i class="fa-solid fa-file-arrow-up" style="font-size:10px"></i> Sincronizar con banco
-            </button>
-          </div>
-
-          <!-- PANEL SINCRONIZAR CON BANCO -->
-          <div id="syncBancoPanel" style="display:none;margin-bottom:12px">
-            <div style="background:rgba(91,141,239,0.07);border:1px solid rgba(91,141,239,0.2);border-radius:var(--radius);padding:12px 13px;">
-              <div style="font-size:10.5px;font-weight:600;color:var(--blue);margin-bottom:6px;display:flex;align-items:center;gap:6px">
-                <i class="fa-solid fa-paste"></i> Pegar tabla del banco (PDF/Excel)
-              </div>
-              <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6">
-                Copia las columnas <strong style="color:var(--text2)">Cuota, Capital, Interés, Saldo</strong> del PDF o Excel del banco y pégalas aquí. Cada fila en una línea, valores separados por coma, punto y coma, o Tab.
-              </div>
-              <textarea id="syncBancoInput" class="sync-textarea" placeholder="Ej:
-1, 424691, 601671, 20625309
-2, 432131, 360930, 20193178
-3, 439691, 353370, 19753487
-..."></textarea>
-              <div class="sync-btn-row">
-                <button type="button" class="btn btn-primary btn-sm" id="btnParseSyncBanco" style="flex:1"><i class="fa-solid fa-check" style="font-size:10px"></i> Comparar</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="btnClearSyncBanco"><i class="fa-solid fa-xmark" style="font-size:10px"></i> Limpiar</button>
-              </div>
-              <div id="syncBancoError" class="sync-error"></div>
+        <div class="table-section-header">
+          <h2>Tabla de amortización — Interés real por días exactos</h2>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="filter-btns">
+              <button type="button" class="filter-btn active"
+                data-filter="all">Todas</button>
+              <button type="button" class="filter-btn"
+                data-filter="paid">Pagadas</button>
+              <button type="button" class="filter-btn"
+                data-filter="pending">Pendientes</button>
             </div>
-          </div>
-
-          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">
-            Compara <span style="color:var(--blue)">AMORT_CALC</span> (fórmulas francesas puras) con
-            <span style="color:var(--amber)" id="bancoSourceLabel">AMORT_BANCO</span> (hardcodeado).
-            Diferencias <span style="color:var(--red);font-weight:600">&gt;$5</span> se resaltan en rojo.
-          </div>
-          <div id="verificacionGrid" style="max-height:300px;overflow-y:auto;font-size:11px;font-family:var(--mono)"></div>
-          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="verificacionSummary"></div>
-        </div>
-      </div>
-    </div>
-    <!-- TAB LOG DE CAMBIOS -->
-    <div class="tab-panel" id="tab-log" role="tabpanel" aria-labelledby="tabtrigger-log">
-      <div class="payment-panel">
-        <div class="panel-section" style="border:none;padding:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
-            <div class="panel-section-title" style="margin-bottom:0">Historial de cambios</div>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnClearLog" style="font-size:10px;opacity:0.7" title="Borrar historial">
-              <i class="fa-solid fa-trash" style="font-size:9px"></i> Limpiar
+            <button type="button" class="tbl-toggle-btn" id="simpleTblBtn"
+              title="Mostrar solo columnas esenciales">
+              <i class="fa-solid fa-columns"></i> Vista simple
             </button>
           </div>
-          <div style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-            <div id="logList"></div>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th><i class="fa-solid fa-check"
+                      style="font-size:10px"></i></th>
+                  <th>#</th>
+                  <th>Fecha prog.</th>
+                  <th>Estado</th>
+                  <th class="col-extra">Capital</th>
+                  <th class="col-extra">Interés</th>
+                  <th class="col-extra">Días</th>
+                  <th class="col-extra"
+                    title="Interés que te ahorras en el siguiente período gracias al abono a capital">Ahorro
+                    abono</th>
+                  <th class="col-extra">Cuota base</th>
+                  <th class="col-extra"
+                    title="GMF — Gravamen a los Movimientos Financieros (4×1000). El banco cobra el 0,4% del valor de cada cuota como impuesto. Ej.: cuota $793.061 × 0,004 = $3.172. Haz clic en el valor para marcar si fue cobrado o no.">GMF
+                    <i class="fa-solid fa-hand-pointer"
+                      style="font-size:8px;opacity:0.5"></i></th>
+                  <th class="th-highlight"
+                    title="Cuota fija del banco + abono a capital (si aplica)">Total
+                    a pagar</th>
+                  <th>Saldo restante</th>
+                  <th>Fecha pago</th>
+                  <th class="col-extra">Nota</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
           </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6">
-            <i class="fa-solid fa-circle-info" style="color:var(--blue);margin-right:3px"></i>
-            El log registra todas las acciones realizadas. <span style="color:var(--green)">Se guarda automáticamente</span> y persiste entre sesiones. Máximo 200 entradas.
+        </div>
+
+      </div>
+
+    </div><!-- /full-view -->
+
+    <!-- ABONO EDIT MODAL -->
+    <div class="abono-modal-overlay" id="abonoEditModal" role="dialog"
+      aria-modal="true" aria-labelledby="abonoEditTitle">
+      <div class="abono-modal-box">
+        <div class="abono-modal-header">
+          <div class="abono-modal-icon"><i class="fa-solid fa-coins"></i></div>
+          <div>
+            <div class="abono-modal-title" id="abonoEditTitle">Editar
+              abono</div>
+            <div class="abono-modal-sub" id="abonoEditSub"></div>
           </div>
+        </div>
+        <div class="field-label modal-field-label">Valor del abono a capital
+          ($)</div>
+        <input type="number" class="abono-modal-input" id="abonoEditVal"
+          placeholder="0" min="0">
+        <div class="field-label modal-field-label">Fecha real del abono <span
+            class="color-text3 fw-400 fz-10">(cualquier día)</span></div>
+        <input type="date" class="abono-modal-input modal-date-input"
+          id="abonoEditFecha">
+        <div
+          style="font-size:10px;color:var(--text3);margin-bottom:8px;margin-top:-8px;line-height:1.5"><i
+            class="fa-solid fa-circle-info"
+            style="color:var(--blue);margin-right:3px"></i>La fecha del abono no
+          puede ser futura — si aún no ha ocurrido, deja el campo en
+          blanco.</div>
+        <div id="abonoModalMinHint" class="modal-hint-info">
+          <i class="fa-solid fa-triangle-exclamation"
+            style="margin-right:4px"></i><span id="abonoModalMinHintText">Mínimo
+            exigido: ...</span>
+        </div>
+        <div class="modal-regla-box">
+          Pon 0 para eliminar el abono.<br>
+          <span id="abonoModalReglaText" class="color-amber"></span>
+        </div>
+        <div class="abono-modal-btns">
+          <button type="button" class="btn btn-ghost"
+            id="btnCloseAbonoModal">Cancelar</button>
+          <button type="button" class="btn btn-success"
+            id="btnSaveAbonoModal"><i class="fa-solid fa-check"></i>
+            Guardar</button>
         </div>
       </div>
     </div>
-  </div>
-</div>
-<div class="table-section-header">
-  <h2>Tabla de amortización — Interés real por días exactos</h2>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <div class="filter-btns">
-      <button type="button" class="filter-btn active" data-filter="all">Todas</button>
-      <button type="button" class="filter-btn" data-filter="paid">Pagadas</button>
-      <button type="button" class="filter-btn" data-filter="pending">Pendientes</button>
-    </div>
-    <button type="button" class="tbl-toggle-btn" id="simpleTblBtn" title="Mostrar solo columnas esenciales">
-      <i class="fa-solid fa-columns"></i> Vista simple
-    </button>
-  </div>
-</div>
 
-<div class="table-wrap">
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th><i class="fa-solid fa-check" style="font-size:10px"></i></th>
-          <th>#</th>
-          <th>Fecha prog.</th>
-          <th>Estado</th>
-          <th class="col-extra">Capital</th>
-          <th class="col-extra">Interés</th>
-          <th class="col-extra">Días</th>
-          <th class="col-extra" title="Interés que te ahorras en el siguiente período gracias al abono a capital">Ahorro abono</th>
-          <th class="col-extra">Cuota base</th>
-          <th class="col-extra" title="GMF — Gravamen a los Movimientos Financieros (4×1000). El banco cobra el 0,4% del valor de cada cuota como impuesto. Ej.: cuota $793.061 × 0,004 = $3.172. Haz clic en el valor para marcar si fue cobrado o no.">GMF <i class="fa-solid fa-hand-pointer" style="font-size:8px;opacity:0.5"></i></th>
-          <th class="th-highlight" title="Cuota fija del banco + abono a capital (si aplica)">Total a pagar</th>
-          <th>Saldo restante</th>
-          <th>Fecha pago</th>
-          <th class="col-extra">Nota</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </div>
-</div>
-
-</div>
-
-</div><!-- /full-view -->
-
-<!-- ABONO EDIT MODAL -->
-<div class="abono-modal-overlay" id="abonoEditModal" role="dialog" aria-modal="true" aria-labelledby="abonoEditTitle">
-  <div class="abono-modal-box">
-    <div class="abono-modal-header">
-      <div class="abono-modal-icon"><i class="fa-solid fa-coins"></i></div>
-      <div>
-        <div class="abono-modal-title" id="abonoEditTitle">Editar abono</div>
-        <div class="abono-modal-sub" id="abonoEditSub"></div>
+    <div class="abono-modal-overlay" id="pinModalOverlay" role="dialog"
+      aria-modal="true" aria-labelledby="pinModalTitle">
+      <div class="abono-modal-box">
+        <div class="abono-modal-header">
+          <div class="abono-modal-icon"><i class="fa-solid fa-lock"></i></div>
+          <div>
+            <div class="abono-modal-title" id="pinModalTitle">Desbloquear
+              edición</div>
+            <div class="abono-modal-sub">Ingresa el PIN para poder editar</div>
+          </div>
+        </div>
+        <input type="password" inputmode="numeric" class="abono-modal-input"
+          id="pinModalInput" placeholder="PIN" autocomplete="off">
+        <div id="pinModalError"
+          style="display:none;font-size:11.5px;color:var(--red);margin:-6px 0 10px;">
+          <i class="fa-solid fa-triangle-exclamation"
+            style="margin-right:4px"></i>PIN incorrecto, intenta de nuevo
+        </div>
+        <div class="abono-modal-btns">
+          <button type="button" class="btn btn-ghost"
+            id="btnClosePinModal">Cancelar</button>
+          <button type="button" class="btn btn-success"
+            id="btnSubmitPinModal"><i class="fa-solid fa-unlock"></i>
+            Desbloquear</button>
+        </div>
       </div>
     </div>
-    <div class="field-label modal-field-label">Valor del abono a capital ($)</div>
-    <input type="number" class="abono-modal-input" id="abonoEditVal" placeholder="0" min="0">
-    <div class="field-label modal-field-label">Fecha real del abono <span class="color-text3 fw-400 fz-10">(cualquier día)</span></div>
-    <input type="date" class="abono-modal-input modal-date-input" id="abonoEditFecha">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:8px;margin-top:-8px;line-height:1.5"><i class="fa-solid fa-circle-info" style="color:var(--blue);margin-right:3px"></i>La fecha del abono no puede ser futura — si aún no ha ocurrido, deja el campo en blanco.</div>
-    <div id="abonoModalMinHint" class="modal-hint-info">
-      <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i><span id="abonoModalMinHintText">Mínimo exigido: ...</span>
-    </div>
-    <div class="modal-regla-box">
-      Pon 0 para eliminar el abono.<br>
-      <span id="abonoModalReglaText" class="color-amber"></span>
-    </div>
-    <div class="abono-modal-btns">
-      <button type="button" class="btn btn-ghost" id="btnCloseAbonoModal">Cancelar</button>
-      <button type="button" class="btn btn-success" id="btnSaveAbonoModal"><i class="fa-solid fa-check"></i> Guardar</button>
-    </div>
-  </div>
-</div>
 
-<div class="abono-modal-overlay" id="pinModalOverlay" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
-  <div class="abono-modal-box">
-    <div class="abono-modal-header">
-      <div class="abono-modal-icon"><i class="fa-solid fa-lock"></i></div>
-      <div>
-        <div class="abono-modal-title" id="pinModalTitle">Desbloquear edición</div>
-        <div class="abono-modal-sub">Ingresa el PIN para poder editar</div>
-      </div>
-    </div>
-    <input type="password" inputmode="numeric" class="abono-modal-input" id="pinModalInput" placeholder="PIN" autocomplete="off">
-    <div id="pinModalError" style="display:none;font-size:11.5px;color:var(--red);margin:-6px 0 10px;">
-      <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px"></i>PIN incorrecto, intenta de nuevo
-    </div>
-    <div class="abono-modal-btns">
-      <button type="button" class="btn btn-ghost" id="btnClosePinModal">Cancelar</button>
-      <button type="button" class="btn btn-success" id="btnSubmitPinModal"><i class="fa-solid fa-unlock"></i> Desbloquear</button>
-    </div>
-  </div>
-</div>
-
-<script>
+    <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────────────────
 const DEBUG = false; // set true during development to see verbose logs
 function _dbg(...args) { if (DEBUG) console.log(...args); }
@@ -3754,5 +3969,5 @@ render();
 renderLog();
 initCuotaTexts();
 </script>
-</body>
+  </body>
 </html>
