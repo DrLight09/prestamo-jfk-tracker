@@ -1058,14 +1058,16 @@ body.view-summary .full-view { display: none; }
           <div class="field-group">
             <label class="field-label" for="fechaConsulta">Consultar saldo al día</label>
             <input type="date" id="fechaConsulta" value="">
+            <div class="info-box"><i class="fa-solid fa-circle-info color-blue" style="margin-right:3px"></i>Funciona con <span style="color:var(--text2)">fechas pasadas</span> (ej. "¿cuánto debía el 6 de junio?") y también con fechas futuras.</div>
           </div>
           <div class="calc-preview visible" id="deudaResult">
             <div class="calc-row"><span class="ck">Saldo capital</span><span class="cv" id="dr-cap">—</span></div>
             <div class="calc-row"><span class="ck">Interés acumulado (días)</span><span class="cv val-red" id="dr-int">—</span></div>
-            <div class="calc-row"><span class="ck">Días desde último pago</span><span class="cv" id="dr-dias">—</span></div>
+            <div class="calc-row"><span class="ck">Días desde último pago/abono</span><span class="cv" id="dr-dias">—</span></div>
             <div class="calc-row total"><span class="ck">Deuda total ese día</span><span class="cv" id="dr-total">—</span></div>
           </div>
-          <div class="info-note" style="margin-top:9px">Esto muestra cuánto deberías pagarle al banco <span>en cualquier fecha</span>, incluyendo el interés diario generado hasta ese momento.</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--mono)"><i class="fa-solid fa-clock-rotate-left" style="margin-right:4px;color:var(--blue)"></i>Calculado desde: <span id="dr-base" style="color:var(--text2)">—</span></div>
+          <div class="info-note" style="margin-top:9px">Esto muestra cuánto le debías (o deberás) al banco <span>en cualquier fecha</span>, usando el saldo real vigente ese día — no el saldo de hoy — más el interés generado desde el pago o abono anterior a esa fecha.</div>
         </div>
       </div>
     </div>
@@ -2643,7 +2645,60 @@ function render() {
 }
 
 // ── SIMULADOR FECHA ───────────────────────────────────────────────────────────
-// ── CUÁNTO DEBO HOY ───────────────────────────────────────────────────────────
+// ── LÍNEA DE TIEMPO DE SALDOS — para consultar CUALQUIER fecha (pasada o futura) ─
+// Construye la secuencia cronológica de "puntos de quiebre" del saldo: el
+// desembolso inicial, y cada vez que el saldo bajó (por cuota pagada o por un
+// abono a capital con fecha registrada). Con esto, consultar una fecha pasada
+// usa el saldo QUE REALMENTE EXISTÍA en ese momento (no el saldo actual), y
+// consultar una fecha futura proyecta el interés desde el último quiebre real.
+function buildSaldoTimeline() {
+  const rows = calcRows();
+  const events = [{ date: FECHA_INICIO, saldo: PRESTAMO_INICIAL, label: 'Desembolso inicial' }];
+
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    const p = state.pagos[i], r = rows[i];
+    if (r.cap <= 0) continue; // fila post-liquidación, no aporta quiebres
+    if (p.pagada) {
+      // Cuota pagada: el saldo baja a r.saldoCalc (ya incluye capital + abono
+      // de esta misma cuota, si lo hubo) en la fecha real de pago (o la
+      // programada si no se registró fecha real).
+      const fecha = p.fecha ? parseDate(p.fecha) : r.fechaProg;
+      events.push({ date: fecha, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
+    } else if ((p.abono || 0) > 0 && p.abonoFecha) {
+      // Abono registrado sin marcar la cuota como pagada: el saldo baja solo
+      // por el abono (el capital de la cuota aún no se ha amortizado).
+      const saldoConAbono = Math.max(0, r.saldoAntes - p.abono);
+      events.push({ date: parseDate(p.abonoFecha), saldo: saldoConAbono, label: `Abono cuota ${i+1}` });
+    }
+  }
+
+  // Orden cronológico (por si un abono se registró fuera de orden de cuotas)
+  events.sort((a, b) => toUTC(a.date) - toUTC(b.date));
+  return events;
+}
+
+// Devuelve el saldo/intereses/deuda EXACTOS para cualquier fecha consultada,
+// usando el quiebre de saldo vigente en ese momento (no el saldo de hoy).
+function saldoEnFecha(consultaDate) {
+  const timeline = buildSaldoTimeline();
+  let base = timeline[0];
+  for (const ev of timeline) {
+    if (toUTC(ev.date) <= toUTC(consultaDate)) base = ev;
+    else break;
+  }
+  const dias = Math.max(0, daysBetween30_360(base.date, consultaDate));
+  const intAcum = Math.round(calcIntSimple(base.saldo, dias));
+  return {
+    saldo: base.saldo,
+    dias,
+    intAcum,
+    deuda: base.saldo + intAcum,
+    baseDate: base.date,
+    baseLabel: base.label
+  };
+}
+
+// ── CUÁNTO DEBO — cualquier fecha (hoy, pasada o futura) ──────────────────────
 function calcDeudaFecha() {
   const fi = document.getElementById('fechaConsulta');
   if (!fi.value) {
@@ -2654,28 +2709,18 @@ function calcDeudaFecha() {
   }
 
   const consulta = parseDate(fi.value);
-  const rows = calcRows();
-
-  // Find last paid state
-  let saldo = PRESTAMO_INICIAL;
-  let lastDate = FECHA_INICIO;
-  for (let i=0; i<PLAZO_MESES; i++) {
-    const p = state.pagos[i], r = rows[i];
-    if (p.pagada) {
-      saldo = r.saldoCalc;
-      if (p.fecha) lastDate = parseDate(p.fecha);
-      else lastDate = r.fechaProg;
-    }
-  }
-
-  const dias = Math.max(0, daysBetween30_360(lastDate, consulta));
-  const intAcum = Math.round(calcIntSimple(saldo, dias));
-  const deuda = saldo + intAcum;
+  const { saldo, dias, intAcum, deuda, baseDate, baseLabel } = saldoEnFecha(consulta);
 
   document.getElementById('dr-cap').textContent   = fmt(saldo);
   document.getElementById('dr-int').textContent   = fmt(intAcum);
   document.getElementById('dr-dias').textContent  = `${dias} día${dias!==1?'s':''}`;
   document.getElementById('dr-total').textContent = fmt(deuda);
+
+  const baseEl = document.getElementById('dr-base');
+  if (baseEl) {
+    const y = baseDate.getUTCFullYear(), m = String(baseDate.getUTCMonth()+1).padStart(2,'0'), d = String(baseDate.getUTCDate()).padStart(2,'0');
+    baseEl.textContent = `${baseLabel} · ${d}/${m}/${y}`;
+  }
 }
 
 // ── ABONO PREVIEW ─────────────────────────────────────────────────────────────
