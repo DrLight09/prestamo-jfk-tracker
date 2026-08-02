@@ -585,10 +585,10 @@ body.readonly-mode #tab-log {
     padding: 13px;
   }
   tbody tr:last-child { margin-bottom: 0; }
-  tbody tr.row-paid  { background: rgba(45,212,160,0.08); }
-  tbody tr.row-early { background: rgba(45,212,160,0.1); }
-  tbody tr.row-late  { background: rgba(240,100,122,0.08); }
-  tbody tr.row-today { background: rgba(91,141,239,0.1); outline: 1px solid rgba(91,141,239,0.25); }
+  tbody tr.row-paid  { background: var(--bg4); border-left: 3px solid var(--green); }
+  tbody tr.row-early { background: var(--bg4); border-left: 3px solid var(--green); }
+  tbody tr.row-late  { background: var(--bg4); border-left: 3px solid var(--red); }
+  tbody tr.row-today { background: var(--bg4); border-left: 3px solid var(--blue); outline: none; }
 
   tbody td {
     border: none;
