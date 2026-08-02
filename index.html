@@ -554,6 +554,11 @@ body.readonly-mode #tab-log {
 
 /* ── RESPONSIVE TABLE → CARDS ON MOBILE ──────────────────────────────── */
 @media (max-width: 600px) {
+  .table-wrap {
+    background: var(--bg2);
+    border-color: var(--border);
+    padding: 10px;
+  }
   .table-scroll { overflow-x: visible; }
   table, thead, tbody, th, td, tr { display: block; }
   thead { display: none; }
@@ -572,16 +577,18 @@ body.readonly-mode #tab-log {
     column-gap: 8px;
     row-gap: 7px;
     align-items: start;
-    background: var(--bg3);
+    background: var(--bg4);
     border: 1px solid var(--border2);
     border-radius: var(--radius-lg);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.22);
     margin-bottom: 10px;
     padding: 13px;
   }
-  tbody tr.row-paid  { background: rgba(45,212,160,0.05); }
-  tbody tr.row-early { background: rgba(45,212,160,0.07); }
-  tbody tr.row-late  { background: rgba(240,100,122,0.05); }
-  tbody tr.row-today { background: rgba(91,141,239,0.07); outline: 1px solid rgba(91,141,239,0.25); }
+  tbody tr:last-child { margin-bottom: 0; }
+  tbody tr.row-paid  { background: rgba(45,212,160,0.08); }
+  tbody tr.row-early { background: rgba(45,212,160,0.1); }
+  tbody tr.row-late  { background: rgba(240,100,122,0.08); }
+  tbody tr.row-today { background: rgba(91,141,239,0.1); outline: 1px solid rgba(91,141,239,0.25); }
 
   tbody td {
     border: none;
@@ -625,8 +632,8 @@ body.readonly-mode #tab-log {
   td[data-label="GMF"],
   td[data-label="Total real"],
   td[data-label="Saldo"] {
-    background: var(--bg4);
-    border: 1px solid var(--border);
+    background: var(--bg5);
+    border: 1px solid var(--border2);
     border-radius: 8px;
     padding: 7px 9px;
     display: flex;
