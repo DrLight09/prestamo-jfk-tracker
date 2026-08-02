@@ -1403,15 +1403,21 @@ function attachFirestoreListener() {
 
 function pushStateToFirestore() {
   if (!fbDb || _applyingRemote) return;
-  const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
-  ref.set({
-    state: state,
-    auditLog: (typeof auditLog !== 'undefined' ? auditLog : []),
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true }).catch(e => {
-    _dbg('Error guardando en Firestore:', e);
-    showToast('No se pudo sincronizar con la nube (se guardó local).', 'error', 5000);
-  });
+  try {
+    const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
+    ref.set({
+      state: state,
+      auditLog: (typeof auditLog !== 'undefined' ? auditLog : []),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).catch(e => {
+      _dbg('Error guardando en Firestore:', e);
+      showToast('No se pudo sincronizar con la nube (se guardó local).', 'error', 5000);
+    });
+  } catch (e) {
+    // Si Firebase aún no cargó del todo (red lenta, bloqueador, etc.) esto
+    // no debe tumbar la ejecución de quien llamó a pushStateToFirestore().
+    _dbg('Error preparando guardado en Firestore:', e);
+  }
 }
 
 // ── STATE ──────────────────────────────────────────────────────────────────────
@@ -3503,17 +3509,22 @@ function _setReadOnly(value) {
     _showOnlyDebeHoyTab();
     btn.classList.add('active-lock');
     icon.className = 'fa-solid fa-lock';
-    showToast('Modo solo lectura activado', 'warn', 3000);
-    addLog('edit', 'Modo solo lectura <strong>activado</strong>');
   } else {
     btn.classList.remove('active-lock');
     icon.className = 'fa-solid fa-lock-open';
+  }
+  // La UI del botón se actualiza primero: no debe quedar a medias si algo
+  // más abajo (toast, log, sync con Firestore) llegara a fallar.
+  _placeReadOnlyButton();
+  if (readOnly) {
+    showToast('Modo solo lectura activado', 'warn', 3000);
+    addLog('edit', 'Modo solo lectura <strong>activado</strong>');
+  } else {
     showToast('Edición desbloqueada', 'success', 2500);
     addLog('edit', 'Modo solo lectura <strong>desactivado</strong>');
     const abonoBtn = document.getElementById('tabtrigger-abono');
     if (abonoBtn) switchTab('abono', abonoBtn);
   }
-  _placeReadOnlyButton();
 }
 
 // Si la pestaña activa es una de las que se ocultan en modo solo lectura
