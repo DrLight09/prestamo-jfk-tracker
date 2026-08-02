@@ -2660,10 +2660,15 @@ function buildSaldoTimeline() {
     if (r.cap <= 0) continue; // fila post-liquidación, no aporta quiebres
     if (p.pagada) {
       // Cuota pagada: el saldo baja a r.saldoCalc (ya incluye capital + abono
-      // de esta misma cuota, si lo hubo) en la fecha real de pago (o la
-      // programada si no se registró fecha real).
-      const fecha = p.fecha ? parseDate(p.fecha) : r.fechaProg;
-      events.push({ date: fecha, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
+      // de esta misma cuota, si lo hubo). OJO: si pagaste ANTES de la fecha
+      // programada, el "reloj" de interés no arranca antes de esa fecha — el
+      // banco cobra el período completo sin importar si pagás antes o después
+      // (misma regla que ya usa renderTicker() para el saldo de hoy). Solo un
+      // pago TARDÍO adelanta la fecha efectiva, porque ahí sí siguió corriendo
+      // interés sobre el saldo viejo hasta el día real de pago.
+      const fechaReal = p.fecha ? parseDate(p.fecha) : r.fechaProg;
+      const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
+      events.push({ date: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
     } else if ((p.abono || 0) > 0 && p.abonoFecha) {
       // Abono registrado sin marcar la cuota como pagada: el saldo baja solo
       // por el abono (el capital de la cuota aún no se ha amortizado).
