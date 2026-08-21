@@ -1611,6 +1611,21 @@ function attachFirestoreListener() {
       return;
     }
     const remote = snap.data();
+
+    // ── Guardia anti-pisado ───────────────────────────────────────────────
+    // Cada guardado local marca state._updatedAt = Date.now(). Si lo que
+    // llega de la nube es MÁS VIEJO que lo que ya tenemos (por ejemplo:
+    // editaste, recargaste la página muy rápido, y el guardado anterior no
+    // alcanzó a subirse a Firestore antes de la recarga), NO lo aplicamos —
+    // en vez de perder el cambio, volvemos a subir nuestra versión (más
+    // nueva) para que la nube quede al día. Así un guardado nunca desaparece.
+    const remoteTs = (remote.state && remote.state._updatedAt) || 0;
+    const localTs  = (state && state._updatedAt) || 0;
+    if (remote.state && remoteTs < localTs) {
+      pushStateToFirestore();
+      return;
+    }
+
     _applyingRemote = true;
     if (remote.state) {
       state = remote.state;
@@ -1664,6 +1679,7 @@ function loadState() {
 }
 function saveState() {
   try {
+    state._updatedAt = Date.now();
     localStorage.setItem(SK, JSON.stringify(state));
   } catch(e) {
     showToast('Error al guardar datos. El almacenamiento puede estar lleno o bloqueado.', 'error', 6000);
@@ -1827,6 +1843,36 @@ function calcRowLiquidation(saldo, cap) {
   return { esPostLiquidacion, esLiquidacion, capReal };
 }
 
+// ── contarCuotasNecesarias: simula el plan completo y cuenta cuántas cuotas ──
+// hacen falta hasta saldar el préstamo, incluyendo los abonos ya guardados
+// en state.pagos más los abonos hipotéticos que se le pasen en `abonosExtra`
+// (útil para la vista previa del modal de abono, antes de guardarlo).
+// Usa la misma fórmula bancaria (capital recalculado con el saldo real cada
+// cuota) que calcRows(), así el número siempre es consistente con la tabla.
+function contarCuotasNecesarias(abonosExtra) {
+  let saldo = PRESTAMO_INICIAL;
+  let n = 0;
+  for (let i = 0; i < PLAZO_MESES; i++) {
+    if (saldo <= 0) break;
+    n++;
+    const abonoGuardado = (state.pagos[i] && state.pagos[i].abono) || 0;
+    const abonoExtra    = (abonosExtra && abonosExtra[i]) || 0;
+    const abono         = abonoGuardado + abonoExtra;
+
+    let cap;
+    if (i === 0) {
+      cap = CUOTA1_CAP;
+    } else if (i === PLAZO_MESES - 1) {
+      cap = saldo;
+    } else {
+      const interes = calcInteresBANCO(saldo);
+      cap = Math.min(CUOTA_NETA - interes, saldo);
+    }
+    saldo = Math.max(0, saldo - cap - abono);
+  }
+  return n;
+}
+
 // ── calcRows: orquesta el cálculo fila por fila ───────────────────────────────
 function calcRows() {
   let saldo    = PRESTAMO_INICIAL;
@@ -1834,14 +1880,49 @@ function calcRows() {
   const rows   = [];
 
   for (let i = 0; i < PLAZO_MESES; i++) {
-    const b     = AMORT_CALC[i];   // fórmulas francesas puras (antes: AMORT)
     const banco = AMORT_BANCO[i];  // referencia del banco, solo para comparación
     const p     = state.pagos[i];
     const abono = p.abono || 0;
 
+    // ── Capital e interés de ESTA cuota, calculados con el saldo REAL ────────
+    // El saldo (variable `saldo` de este loop) ya refleja cualquier abono
+    // aplicado en cuotas anteriores. Antes esto se leía de AMORT_CALC, una
+    // tabla congelada calculada UNA sola vez sin abonos — por eso un abono
+    // no aceleraba el resto del plan (el interés de las cuotas siguientes no
+    // bajaba aunque el saldo real fuera menor). Ahora se recalcula cuota a
+    // cuota con el saldo real, igual que hace el Excel (=I9*$H$3 sobre el
+    // saldo de la fila anterior).
+    let b;
+    if (i === 0) {
+      // Cuota 1: período irregular (49 días) — valores exactos del banco.
+      b = { cap: CUOTA1_CAP, int: CUOTA1_INT, cuota: CUOTA1_TOTAL, gmf: CUOTA1_GMF };
+    } else if (saldo <= 0) {
+      // El préstamo ya quedó en $0 antes de llegar a esta cuota.
+      b = { cap: 0, int: 0, cuota: 0, gmf: 0 };
+    } else if (i === PLAZO_MESES - 1) {
+      // Última cuota contractual: si llega hasta acá con saldo, cierra con lo que quede.
+      const intFinal = calcInteresBANCO(saldo);
+      const cuotaFinal = saldo + intFinal;
+      b = { cap: saldo, int: intFinal, cuota: cuotaFinal, gmf: Math.round(cuotaFinal * GMF_RATE) };
+    } else {
+      const interes  = calcInteresBANCO(saldo);        // round(saldo × i/30) × 30
+      const capBruto = CUOTA_NETA - interes;            // capital "normal" de la cuota fija
+      b = { cap: capBruto, int: interes, cuota: CUOTA_NETA, gmf: Math.round(CUOTA_NETA * GMF_RATE) };
+    }
+
     const dates       = calcRowDates(i, prevDate);
     const interest    = calcRowInterest(saldo, b.cap, dates);
     const liquidation = calcRowLiquidation(saldo, b.cap);
+
+    // ── Cuota que liquida el préstamo ─────────────────────────────────────
+    // Si el capital "normal" de esta cuota es mayor que lo que falta pagar,
+    // esta es la última cuota real: se ajustan capital, cuota y GMF al monto
+    // exacto que falta (no al valor fijo completo), y de ahí en más el saldo
+    // queda en $0 (cuotas posteriores se marcan como no necesarias).
+    if (liquidation.esLiquidacion) {
+      const cuotaAjustada = liquidation.capReal + b.int;
+      b = { ...b, cap: liquidation.capReal, cuota: cuotaAjustada, gmf: Math.round(cuotaAjustada * GMF_RATE) };
+    }
 
     const gmfCobrado  = p.gmfCobrado !== false; // default true
     const gmfEfectivo = gmfCobrado ? b.gmf : 0;
@@ -3008,7 +3089,14 @@ function previewAbono() {
 
   // How much does this abono reduce the interest in following cuotas?
   const intAhorrado = Math.round(valor * TASA_MENSUAL); // approx per month
-  const mesesAhorro = Math.round(valor / r.cap);
+  // Cuotas que se ahorran: simulación real (con saldo e interés recalculado
+  // cuota a cuota) comparando el plan actual contra el plan con este abono
+  // sumado. No es una simple división valor/cuota — el ahorro se compone,
+  // porque cada abono también reduce el interés (y por lo tanto sube el
+  // capital) de todas las cuotas siguientes.
+  const cuotasSinEsteAbono = contarCuotasNecesarias({});
+  const cuotasConEsteAbono = contarCuotasNecesarias({ [idx]: valor });
+  const mesesAhorro = Math.max(0, cuotasSinEsteAbono - cuotasConEsteAbono);
 
   impact.className = 'abono-impact visible';
   body.innerHTML = `
