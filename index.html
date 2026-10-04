@@ -1535,7 +1535,6 @@ function calcInteresBANCO(saldo) {
 const FECHAS_PROG = [];
 const FECHAS_LABEL = [];
 (function buildFechas() {
-  const MESES_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   // Fecha de la primera cuota: 1 may 2026
   let y = 2026, m = 5; // mes 1-based
   for (let i = 0; i < PLAZO_MESES; i++) {
@@ -1696,15 +1695,21 @@ function attachFirestoreListener() {
     }
     if (remote.state) setLastSyncedTs(remoteTs);
     _applyingRemote = true;
-    if (remote.state) {
-      state = remote.state;
-      localStorage.setItem(SK, JSON.stringify(state));
+    try {
+      if (remote.state) {
+        state = remote.state;
+        localStorage.setItem(SK, JSON.stringify(state));
+      }
+      if (remote.auditLog) {
+        auditLog = remote.auditLog;
+        localStorage.setItem(LOG_SK, JSON.stringify(auditLog));
+      }
+    } catch (e) {
+      // localStorage lleno/bloqueado: el estado en memoria ya se aplicó; seguimos y re-renderizamos.
+      _dbg('Error guardando copia remota en localStorage:', e);
+    } finally {
+      _applyingRemote = false; // nunca debe quedar en true (bloquearía todas las subidas)
     }
-    if (remote.auditLog) {
-      auditLog = remote.auditLog;
-      localStorage.setItem(LOG_SK, JSON.stringify(auditLog));
-    }
-    _applyingRemote = false;
     if (typeof render === 'function') render();
   }, err => {
     _dbg('onSnapshot error:', err);
@@ -3183,8 +3188,9 @@ function saldoEnFecha(consultaDate, rowsOpt) {
 // ── CUÁNTO DEBO — cualquier fecha (hoy, pasada o futura) ──────────────────────
 function calcDeudaFecha() {
   const fi = document.getElementById('fechaConsulta');
-  if (!fi.value) {
-    // default to today
+  if (!fi.value) delete fi.dataset.manual;
+  if (fi.dataset.manual !== '1') {
+    // sin fecha elegida por el usuario: seguir siempre a "hoy" (coincide con el ticker)
     const t = todayUTC();
     const y = t.getUTCFullYear(), m = String(t.getUTCMonth()+1).padStart(2,'0'), d = String(t.getUTCDate()).padStart(2,'0');
     fi.value = `${y}-${m}-${d}`;
@@ -3267,7 +3273,7 @@ function previewAbono() {
     <div class="calc-row"><span class="ck">Abono al capital</span><span class="cv val-green">${fmt(valor)}</span></div>
     <div class="calc-row"><span class="ck">Interés que ahorras/mes</span><span class="cv val-green">≈ ${fmt(intAhorrado)}</span></div>
     <div class="calc-row"><span class="ck">Cuotas que acorta aprox.</span><span class="cv val-green">≈ ${mesesAhorro} mes${mesesAhorro!==1?'es':''}</span></div>
-    <div class="calc-row"><span class="ck">Nuevo saldo (tras cuota y abono)</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - r.cap - (state.pagos[idx].abono || 0) - valor))}</span></div>`;
+    <div class="calc-row"><span class="ck">Nuevo saldo (tras cuota y abono)</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - r.cap - (r.abono || 0) - valor))}</span></div>`;
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
@@ -3403,7 +3409,7 @@ function setFilter(f, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   render();
-  const labels = { all:'Mostrando todas las cuotas', paid:'Filtrando: pagadas', pending:'Filtrando: pendientes', overdue:'Filtrando: vencidas' };
+  const labels = { all:'Mostrando todas las cuotas', paid:'Filtrando: pagadas', pending:'Filtrando: pendientes' };
   showToast(labels[f] || 'Filtro aplicado', 'info', 2000);
 }
 function switchTab(name, btn) {
@@ -3791,7 +3797,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Fecha consulta ────────────────────────────────────────────────────────
-  document.getElementById('fechaConsulta').addEventListener('change', calcDeudaFecha);
+  document.getElementById('fechaConsulta').addEventListener('change', function() { this.dataset.manual = '1'; calcDeudaFecha(); });
 
   // ── Info note toggles ─────────────────────────────────────────────────────
   document.querySelectorAll('.info-note-toggle').forEach(toggle => {
