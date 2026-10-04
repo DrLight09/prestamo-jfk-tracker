@@ -1109,7 +1109,8 @@ body.view-summary .full-view { display: none; }
                         los siguientes períodos.<br>
                         <span>Sin penalidad por prepago</span> (cláusula 2)<br>
                         <span>Abonos</span> (pagaré, cláusula Décimo Primera): cada abono paga primero los intereses causados a su fecha y el resto va a capital. El saldo de hoy y "¿Cuánto debo hoy?" usan esa regla con la fecha real del abono; la tabla supone el abono aplicado en la fecha de la cuota elegida (algo más conservadora).<br>
-                        <span style="color:var(--amber)">Al abonar pide "disminución de plazo"</span>: si no lo expresas, la cooperativa lo aplica como disminución de cuota. Págalo directo al crédito, no consignando a la cuenta de ahorros.
+                        <span style="color:var(--amber)">Al abonar pide "disminución de plazo"</span>: si no lo expresas, la cooperativa lo aplica como disminución de cuota. Págalo directo al crédito, no consignando a la cuenta de ahorros.<br>
+                        <div id="moraInfo"></div>
                       </div>
                     </div>
                   </div>
@@ -1448,6 +1449,53 @@ const PLAZO_MESES      = 36;          // ← única fuente de verdad para el pla
 const TASA_MENSUAL = 0.0175;
 // Fórmula: saldo × (21% / 360) × días
 const TASA_DIARIA = 0.21 / 360; // = 0.000583333... (mismo valor que 1.75%/30)
+
+// ── TASA DE MORA ──────────────────────────────────────────────────────────────
+// El pagaré (cláusula Tercera) cobra mora a "la tasa máxima permitida por la ley" =
+// tasa de usura de consumo, que la Superfinanciera certifica CADA MES (Resolución).
+// Para actualizarla: botón "Actualizar" en el banner de cuota vencida o en
+// "Cómo se calculan los intereses". Si prefieres cambiarla aquí en el código,
+// edita este valor y su mes (formato AAAA-MM). Prevalece el valor de mes más reciente.
+const MORA_DEFAULT = { ea: 28.59, mes: '2026-10' }; // Res. 1472/2026 (oct-2026)
+const MORA_SK = 'loan_tracker_jfk_v4_mora';
+const MORA_FUENTE = 'https://www.superfinanciera.gov.co/publicaciones/10114944/superfinanciera-certifica-el-interes-bancario-corriente/';
+const MESES_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function moraMesLabel(m) { const [y, mm] = String(m).split('-'); return `${MESES_ES[(+mm || 1) - 1]}-${y}`; }
+function getMora() {
+  let m = MORA_DEFAULT;
+  try {
+    const g = JSON.parse(localStorage.getItem(MORA_SK) || 'null');
+    if (g && Number.isFinite(g.ea) && g.ea > 0 && g.ea < 100 && /^\d{4}-\d{2}$/.test(g.mes) && g.mes >= m.mes) m = g;
+  } catch (e) {}
+  return m;
+}
+function moraMesActual() {
+  const t = todayUTC();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+function moraDesactualizada() { return getMora().mes < moraMesActual(); }
+function actualizarTasaMora() {
+  const cur = getMora();
+  const v = window.prompt(
+    `Tasa de mora máxima legal (usura de consumo), % efectivo anual.\n` +
+    `Vigente en ${moraMesLabel(moraMesActual())}: búscala en la certificación mensual de la Superfinanciera.\n` +
+    `Guardada ahora: ${cur.ea}% (${moraMesLabel(cur.mes)}).`, String(cur.ea));
+  if (v === null) return;
+  const ea = parseFloat(String(v).replace(',', '.').replace('%', ''));
+  if (!Number.isFinite(ea) || ea <= 0 || ea >= 100) { showToast('Tasa no válida (usa algo como 28,59)', 'warn', 3000); return; }
+  try { localStorage.setItem(MORA_SK, JSON.stringify({ ea, mes: moraMesActual() })); } catch (e) {}
+  showToast(`Tasa de mora guardada: ${ea}% E.A. (${moraMesLabel(moraMesActual())})`, 'success', 3000);
+  render();
+}
+function renderMoraInfo() {
+  const el = document.getElementById('moraInfo');
+  if (!el) return;
+  const m = getMora(), vieja = moraDesactualizada();
+  el.innerHTML = `<span>Tasa de mora (usura):</span> ${m.ea}% E.A. · ${moraMesLabel(m.mes)}` +
+    (vieja ? ` <span style="color:var(--amber)">⚠ es de un mes anterior; actualízala</span>` : '') +
+    ` <a href="#" onclick="actualizarTasaMora();return false" style="color:var(--blue)">Actualizar</a>` +
+    ` · <a href="${MORA_FUENTE}" target="_blank" rel="noopener" style="color:var(--blue)">Ver certificación</a>`;
+}
 const GMF_RATE = 0.004;
 const FECHA_INICIO_ISO   = '2026-03-12';
 const FECHA_INICIO_LABEL = '12 mar 2026';
@@ -1608,7 +1656,9 @@ function attachFirestoreListener() {
   ref.onSnapshot(snap => {
     if (!snap.exists) {
       // No hay nada remoto todavía: subimos lo que haya local para inicializar.
-      pushStateToFirestore();
+      // Solo si el SERVIDOR confirmó que no existe: un snapshot de caché/offline
+      // vacío no debe sobrescribir datos reales al volver la conexión.
+      if (!snap.metadata.fromCache) pushStateToFirestore();
       return;
     }
     const remote = snap.data() || {};
@@ -2315,6 +2365,7 @@ function _runTestsCore() {
 
 // ── NEXT PAYMENT BANNER ───────────────────────────────────────────────────────
 function renderNextBanner(rows) {
+  renderMoraInfo();
   const today = todayUTC();
   let nextIdx = -1;
   for (let i = 0; i < PLAZO_MESES; i++) {
@@ -2343,7 +2394,7 @@ function renderNextBanner(rows) {
   const dias = daysBetween(today, fechaP);
   const label = FECHAS_LABEL[nextIdx];
 
-  monto.textContent  = fmt(r.totalReal);
+  monto.textContent  = fmt(r.totalReal - (r.abono || 0)); // el abono registrado ya se pagó
   interes.textContent= fmt(r.int);
 
   let chipCls = 'cc-blue';
@@ -2351,11 +2402,25 @@ function renderNextBanner(rows) {
     banner.className = 'next-banner overdue';
     icon.innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:var(--red)"></i>';
     title.textContent = `Cuota ${nextIdx+1} — ${label} — VENCIDA`;
-    const diasVencida30_360 = Math.max(0, daysBetween30_360(fechaP, today));
-    const intExtra = calcIntSimple(r.saldoAntes, diasVencida30_360);
-    sub.textContent = `Lleva ${Math.abs(dias)} días calendario vencida · interés extra a tasa corriente (30/360): ${fmt(intExtra)}. La mora real se cobra a la tasa máxima legal (pagaré, cláusula Tercera), así que puede ser mayor.`;
+    // Mora (pagaré, cláusula Tercera): tasa máxima legal sobre el CAPITAL vencido de cada
+    // cuota impaga, desde su fecha de exigibilidad (días calendario, tasa E.A. compuesta).
+    const mora = getMora();
+    let capVenc = 0, moraEst = 0;
+    for (let k = 0; k < PLAZO_MESES; k++) {
+      if (state.pagos[k].pagada || rows[k].esPostLiquidacion) continue;
+      const fk = parseDate(FECHAS_PROG[k]);
+      const dk = daysBetween(fk, today);
+      if (dk > 0 && rows[k].cap > 0) {
+        capVenc += rows[k].cap;
+        moraEst += rows[k].cap * (Math.pow(1 + mora.ea / 100, dk / 365) - 1);
+      }
+    }
+    moraEst = Math.round(moraEst);
+    sub.textContent = `Lleva ${Math.abs(dias)} días calendario vencida · mora estimada: ${fmt(moraEst)} (${mora.ea}% E.A. sobre capital vencido ${fmt(capVenc)}, tasa de ${moraMesLabel(mora.mes)}). Es un estimado: la tasa legal cambia cada mes.` +
+      (moraDesactualizada() ? ' ⚠ Tasa de un mes anterior: toca "Tasa de mora" para actualizarla.' : '');
     chipCls = 'cc-red';
-    cd.innerHTML = `<span class="countdown-chip cc-red"><i class="fa-solid fa-triangle-exclamation"></i> ${Math.abs(dias)} días vencida</span>`;
+    cd.innerHTML = `<span class="countdown-chip cc-red"><i class="fa-solid fa-triangle-exclamation"></i> ${Math.abs(dias)} días vencida</span>` +
+      ` <button type="button" class="countdown-chip ${moraDesactualizada() ? 'cc-amber' : 'cc-blue'}" style="cursor:pointer;border:none" onclick="actualizarTasaMora()" title="Actualizar la tasa de mora (cambia cada mes)"><i class="fa-solid fa-pen"></i> Tasa de mora ${mora.ea}%</button>`;
   } else if (dias <= 5) {
     banner.className = 'next-banner urgent';
     icon.innerHTML = '<i class="fa-solid fa-bell" style="color:var(--amber)"></i>';
@@ -2823,18 +2888,57 @@ function parseSyncBanco() {
   if (!raw) { errEl.style.display = 'none'; return; }
 
   const rows = [];
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  // Se ignoran encabezados / líneas sin ningún dígito (p. ej. "Cuota  Capital  Interés  Saldo")
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && /\d/.test(l));
 
   // Max reasonable value: 10× the initial loan
   const MAX_VAL = PRESTAMO_INICIAL * 10;
 
-  for (const line of lines) {
+  // Tablas con columnas extra (valor cuota, fecha, seguro…): si todas las filas tienen
+  // la misma cantidad de números (>4), se busca qué columnas son capital/interés/saldo
+  // exigiendo consistencia real: saldo anterior − capital = saldo, y la primera fila
+  // debe sumar el préstamo completo. Si ninguna combinación cuadra, se rechaza.
+  const numsPorLinea = lines.map(l => splitLineBanco(l).map(parseNumBanco).filter(n => !isNaN(n) && n >= 0));
+  let cols = null;
+  const L0 = numsPorLinea[0] ? numsPorLinea[0].length : 0;
+  if (L0 > 4 && numsPorLinea.every(n => n.length === L0)) {
+    const ok = (c, s) => {
+      if (Math.abs(numsPorLinea[0][c] + numsPorLinea[0][s] - PRESTAMO_INICIAL) > 2) return false;
+      for (let r = 1; r < numsPorLinea.length; r++) {
+        if (Math.abs(numsPorLinea[r - 1][s] - numsPorLinea[r][c] - numsPorLinea[r][s]) > 2) return false;
+      }
+      return true;
+    };
+    // El interés de cada fila (desde la 2.ª) debe ser ≈ saldo anterior × tasa diaria × 30 (±5 %);
+    // así no se confunde con el número de cuota, la cuota total u otras columnas.
+    const okInt = (i, s) => {
+      for (let r = 1; r < numsPorLinea.length; r++) {
+        const esperado = numsPorLinea[r - 1][s] * TASA_DIARIA * 30;
+        if (!(esperado > 0) || Math.abs(numsPorLinea[r][i] - esperado) > esperado * 0.05) return false;
+      }
+      return true;
+    };
+    outer: for (let c = 0; c < L0; c++) for (let s = 0; s < L0; s++) {
+      if (c === s || !ok(c, s)) continue;
+      for (let i = 0; i < L0; i++) { if (i !== c && i !== s && okInt(i, s)) { cols = { cap: c, int: i, saldo: s }; break outer; } }
+    }
+    if (!cols) {
+      errEl.textContent = `Las filas tienen ${L0} columnas numéricas y no se pudo identificar capital, interés y saldo. Pega solo: (cuota), capital, interés, saldo.`;
+      errEl.style.display = 'block';
+      return;
+    }
+  }
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
     const parts = splitLineBanco(line);
-    const nums  = parts.map(parseNumBanco).filter(n => !isNaN(n) && n >= 0);
+    const nums  = numsPorLinea[li];
     // We need at least 4 numbers: cuota_num, capital, interes, saldo
     // Also accept 3 numbers without cuota_num: capital, interes, saldo
     let row;
-    if (nums.length >= 4) {
+    if (cols) {
+      row = { cap: nums[cols.cap], int: nums[cols.int], saldo: nums[cols.saldo] };
+    } else if (nums.length >= 4) {
       row = { cap: nums[1], int: nums[2], saldo: nums[3] };
     } else if (nums.length === 3) {
       row = { cap: nums[0], int: nums[1], saldo: nums[2] };
@@ -3025,6 +3129,9 @@ function saldoEnFecha(consultaDate, rowsOpt) {
   const rows = rowsOpt || calcRows();
   const X    = toUTC(consultaDate);
   const hoy  = toUTC(todayUTC());
+  if (X < toUTC(FECHA_INICIO)) {
+    return { saldo: 0, dias: 0, intAcum: 0, deuda: 0, baseDate: FECHA_INICIO, baseLabel: 'Antes del desembolso', abonoSinFecha: false };
+  }
   const bruto = (s, desde, hasta) => calcIntSimple(s, Math.max(0, daysBetween30_360(desde, hasta)));
 
   // Eventos con fecha (cuotas pagadas y abonos fechados) y abonos sin fecha
@@ -3036,7 +3143,7 @@ function saldoEnFecha(consultaDate, rowsOpt) {
     if (p.pagada) {
       const fechaReal = p.fecha ? parseDate(p.fecha) : r.fechaProg;
       const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
-      eventos.push({ tipo: 'pago', fecha: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
+      eventos.push({ tipo: 'pago', fecha: fechaReal, base: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
     } else if ((r.abono || 0) > 0 && !hayPagadaPosterior(i)) {
       // (si una cuota posterior ya está pagada, su saldoCalc ya incluye este abono)
       if (p.abonoFecha) eventos.push({ tipo: 'abono', fecha: parseDate(p.abonoFecha), monto: r.abono, label: `Abono cuota ${i+1}` });
@@ -3052,7 +3159,8 @@ function saldoEnFecha(consultaDate, rowsOpt) {
     const causado = Math.max(0, bruto(saldo, base, fecha) - credito);
     if (monto >= causado) {
       saldo = Math.max(0, saldo - (monto - causado));
-      base = fecha; credito = 0; baseLabel = label;
+      if (toUTC(fecha) > toUTC(base)) base = fecha; // el reloj nunca retrocede (p. ej. tras un pago anticipado)
+      credito = 0; baseLabel = label;
     } else {
       credito += monto; // el abono ni cubre los intereses causados: solo los reduce
     }
@@ -3060,7 +3168,7 @@ function saldoEnFecha(consultaDate, rowsOpt) {
 
   for (const ev of eventos) {
     if (toUTC(ev.fecha) > X) break;
-    if (ev.tipo === 'pago') { saldo = ev.saldo; base = ev.fecha; credito = 0; baseLabel = ev.label; }
+    if (ev.tipo === 'pago') { saldo = ev.saldo; base = ev.base; credito = 0; baseLabel = ev.label; }
     else aplicarAbono(ev.monto, ev.fecha, ev.label);
   }
   if (X >= hoy) {
@@ -3100,7 +3208,7 @@ function calcDeudaFecha() {
 // ── ABONO PREVIEW ─────────────────────────────────────────────────────────────
 function previewAbono() {
   const cuota = document.getElementById('abonoCuota').value;
-  const valor = parseFloat(document.getElementById('abonoValor').value) || 0;
+  const valor = Math.round(parseFloat(document.getElementById('abonoValor').value) || 0);
   const impact = document.getElementById('abonoImpact');
   const body   = document.getElementById('abonoImpactBody');
   const hint   = document.getElementById('abonoMinHint');
@@ -3231,7 +3339,7 @@ function validarFechaAbono(fechaStr, idxCuota) {
 }
 function aplicarAbono() {
   const cuota = document.getElementById('abonoCuota').value;
-  const valor = parseFloat(document.getElementById('abonoValor').value) || 0;
+  const valor = Math.round(parseFloat(document.getElementById('abonoValor').value) || 0);
   if (cuota==='' || valor<=0) { showToast('Selecciona una cuota e ingresa un valor válido.', 'warn'); return; }
   if (valor < ABONO_MINIMO) {
     showConfirm(
@@ -3510,13 +3618,13 @@ function csvCell(v) {
 
 function exportCSV() {
   const rows = calcRows();
-  const headers = ['#','Fecha Prog','Estado','Capital','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago','Nota'];
+  const headers = ['#','Fecha Prog','Estado','Capital','Abono','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago','Nota'];
   const lines = [headers.map(csvCell).join(',')];
   rows.forEach((r,i) => {
     const p = state.pagos[i];
     lines.push([
       i+1, FECHAS_LABEL[i], p.pagada?'Pagada':'Pendiente',
-      r.cap, r.intReal, r.dias,
+      r.cap, r.abono || 0, r.intReal, r.dias,
       r.ahorroAbono, r.cuota, r.gmfEfectivo, r.totalReal, r.saldoCalc,
       p.fecha, p.nota || ''
     ].map(csvCell).join(','));
@@ -3546,7 +3654,7 @@ function closeAbonoModal() {
 }
 function saveAbonoModal() {
   if (abonoEditIdx < 0) return;
-  const val = Math.max(0, parseFloat(document.getElementById('abonoEditVal').value) || 0);
+  const val = Math.max(0, Math.round(parseFloat(document.getElementById('abonoEditVal').value) || 0));
   if (val > 0 && val < ABONO_MINIMO) {
     showConfirm(
       `⚠️ El abono ($${val.toLocaleString('es-CO')}) es menor al mínimo exigido ($${ABONO_MINIMO.toLocaleString('es-CO')}).\n\n¿Deseas guardarlo de todas formas?`,
@@ -3875,8 +3983,10 @@ function addLog(type, msg, val) {
 // llegadas desde Firestore.
 function logSafeMsg(m) {
   return String(m == null ? '' : m)
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/&lt;strong&gt;/g, '<strong>').replace(/&lt;\/strong&gt;/g, '</strong>');
+    .replace(/[\u0001\u0002]/g, '')
+    .replace(/<(\/?)strong>/g, '\u0001$1\u0002')      // protege solo los <strong> literales
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;')         // escapa cualquier otra etiqueta
+    .replace(/\u0001(\/?)\u0002/g, '<$1strong>');       // los restaura; lo ya escapado (&lt;strong&gt;) queda como texto
 }
 
 function renderLog() {
@@ -3908,10 +4018,12 @@ function renderLog() {
 
 function clearLog() {
   if (readOnly) { showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return; }
-  auditLog = [];
-  saveLog();
-  renderLog();
-  showToast('Historial borrado', 'info', 2000);
+  showConfirm('¿Borrar todo el historial de cambios?\nEsta acción no se puede deshacer.', () => {
+    auditLog = [];
+    saveLog();
+    renderLog();
+    showToast('Historial borrado', 'info', 2000);
+  });
 }
 
 // ── READ-ONLY MODE ────────────────────────────────────────────────────────────
@@ -4186,7 +4298,7 @@ function renderSummaryView() {
         return `<div class="sv-next3-row">
           <span class="rn">#${rowIdx + 1}</span>
           <span class="rd">${FECHAS_LABEL[rowIdx]}</span>
-          <span class="rv">${fmt(r.totalReal)}</span>
+          <span class="rv">${fmt(r.totalReal - (r.abono || 0))}</span>
           <span class="rs">${countdown}</span>
         </div>`;
       }).join('');
