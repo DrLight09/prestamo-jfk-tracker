@@ -20,7 +20,7 @@
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
       crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Firebase (mismo proyecto que mis-finanzas) -->
+    <!-- Firebase (proyecto prestamo-jfk-tracker) -->
     <script
       src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script
@@ -810,7 +810,7 @@ body.view-summary .full-view { display: none; }
       <div class="site-header">
         <div class="header-left">
           <h1>Préstamo <span>·</span> Cooperativa JFK</h1>
-          <p>Inicio: 12 mar 2026 · Primera cuota: 1 may 2026 · Interés diario =
+          <p>Inicio: <span data-fecha="inicio">12 mar 2026</span> · Primera cuota: <span data-fecha="primera">1 may 2026</span> · Interés diario =
             <span id="headerDailyRate">$21.050.000 × 21% ÷ 360 =
               $12.279/día</span></p>
         </div>
@@ -1037,7 +1037,7 @@ body.view-summary .full-view { display: none; }
                         class="fa-solid fa-circle-info color-blue"
                         style="margin-right:3px"></i>El abono se registra en la
                       cuota seleccionada. Puedes anotar el día exacto del pago.
-                      Debe estar entre el 12 mar 2026 y hoy (no se permiten
+                      Debe estar entre el <span data-fecha="inicio">12 mar 2026</span> y hoy (no se permiten
                       fechas futuras).</div>
                   </div>
                   <div
@@ -1153,8 +1153,8 @@ body.view-summary .full-view { display: none; }
                           <div class="cuota1-body">
                             Se cobraron <strong>49 días</strong> de interés en
                             lugar de los 30 habituales,
-                            porque el desembolso fue el <strong>12 mar</strong>
-                            y el primer pago el <strong>1 may</strong>
+                            porque el desembolso fue el <strong data-fecha="inicio-corta">12 mar</strong>
+                            y el primer pago el <strong data-fecha="primera-corta">1 may</strong>
                             — período extendido por convención 30/360.
                           </div>
                           <div class="cuota1-chips">
@@ -1467,7 +1467,9 @@ const TASA_MENSUAL = 0.0175;
 // Fórmula: saldo × (21% / 360) × días
 const TASA_DIARIA = 0.21 / 360; // = 0.000583333... (mismo valor que 1.75%/30)
 const GMF_RATE = 0.004;
-const FECHA_INICIO = new Date('2026-03-12T00:00:00Z');
+const FECHA_INICIO_ISO   = '2026-03-12';
+const FECHA_INICIO_LABEL = '12 mar 2026';
+const FECHA_INICIO = new Date(FECHA_INICIO_ISO + 'T00:00:00Z');
 const SK = 'loan_tracker_jfk_v4';
 // ── CUOTA FIJA — valores exactos del banco ───────────────────────────────────
 // Fórmula del banco para cuotas regulares (k=2..35):
@@ -1615,7 +1617,21 @@ function attachFirestoreListener() {
       pushStateToFirestore();
       return;
     }
-    const remote = snap.data();
+    const remote = snap.data() || {};
+
+    // ── Validación del documento remoto ───────────────────────────────────
+    // Cualquier visitante tiene auth anónima: no confiamos en la forma de lo
+    // que llega. Si el estado es inválido lo ignoramos y re-subimos el local.
+    if (remote.state) {
+      const cleanRemote = sanitizeState(remote.state);
+      if (!cleanRemote) {
+        showToast('La nube tiene datos con formato inválido; se ignoraron.', 'warn', 6000);
+        pushStateToFirestore();
+        return;
+      }
+      remote.state = cleanRemote;
+    }
+    remote.auditLog = remote.auditLog ? sanitizeAuditLog(remote.auditLog) : null;
 
     // ── Guardia anti-pisado ───────────────────────────────────────────────
     // Cada guardado local marca state._updatedAt = Date.now(). Si lo que
@@ -1672,20 +1688,63 @@ function pushStateToFirestore() {
 }
 
 // ── STATE ──────────────────────────────────────────────────────────────────────
+const RE_FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const LOG_TYPES = ['paid','abono','reset','import','edit','note','gmf'];
+
+function emptyPago() {
+  return { pagada:false, fecha:'', valor:'', abono:0, abonoFecha:'', nota:'', gmfCobrado:true };
+}
+function emptyState() {
+  return { pagos: Array.from({ length: PLAZO_MESES }, emptyPago) };
+}
+// Valida y normaliza un estado venido de localStorage, Firestore o un backup.
+// Devuelve un estado limpio, o null si la estructura es inválida.
+function sanitizeState(s) {
+  if (!s || typeof s !== 'object' || !Array.isArray(s.pagos) || s.pagos.length !== PLAZO_MESES) return null;
+  const pagos = [];
+  for (const p of s.pagos) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const abono = Number(p.abono);
+    pagos.push({
+      pagada:     p.pagada === true,
+      fecha:      (typeof p.fecha === 'string' && RE_FECHA_ISO.test(p.fecha)) ? p.fecha : '',
+      valor:      (typeof p.valor === 'number' || typeof p.valor === 'string') ? String(p.valor).slice(0, 20) : '',
+      abono:      (isFinite(abono) && abono > 0 && abono <= PRESTAMO_INICIAL) ? abono : 0,
+      abonoFecha: (typeof p.abonoFecha === 'string' && RE_FECHA_ISO.test(p.abonoFecha)) ? p.abonoFecha : '',
+      nota:       typeof p.nota === 'string' ? p.nota.slice(0, 40) : '',
+      gmfCobrado: p.gmfCobrado !== false
+    });
+  }
+  const clean = { pagos };
+  const ts = Number(s._updatedAt);
+  if (isFinite(ts) && ts > 0) clean._updatedAt = ts;
+  return clean;
+}
+// Igual para el log de auditoría (máx. 200 entradas, solo texto).
+function sanitizeAuditLog(a) {
+  if (!Array.isArray(a)) return null;
+  return a.filter(e => e && typeof e === 'object' && typeof e.msg === 'string').slice(0, 200).map(e => ({
+    type: LOG_TYPES.includes(e.type) ? e.type : 'edit',
+    msg:  e.msg.slice(0, 500),
+    val:  e.val ? String(e.val).slice(0, 40) : '',
+    time: String(e.time || '').slice(0, 20),
+    ts:   Number(e.ts) || 0
+  }));
+}
+
 function loadState() {
   try {
     const s = localStorage.getItem(SK);
     if (s) {
-      const parsed = JSON.parse(s);
-      // ensure notes field exists
-      if (parsed.pagos) parsed.pagos = parsed.pagos.map(p => ({nota:'', abonoFecha:'', gmfCobrado:true, ...p}));
-      return parsed;
+      const clean = sanitizeState(JSON.parse(s));
+      if (clean) return clean;
+      showToast('Los datos guardados tenían un formato inválido. Se usará estado vacío.', 'error', 6000);
     }
   } catch(e) {
     showToast('Error al cargar datos guardados. Se usará estado vacío.', 'error', 6000);
     _dbg('loadState error:', e);
   }
-  return { pagos: Array(PLAZO_MESES).fill(null).map(() => ({pagada:false,fecha:'',valor:'',abono:0,abonoFecha:'',nota:'',gmfCobrado:true})) };
+  return emptyState();
 }
 function saveState() {
   try {
@@ -2007,11 +2066,6 @@ function calcRows() {
       // La cuota 1 es especial (período de 49 días, valores hardcodeados).
       // Las cuotas 2-35 son regulares (30 días, calcInteresBANCO).
       // La cuota 36 cierra con el saldo restante.
-      //
-      // Resultado: intConAbono[i] = interés que se pagaría en cuota i+1
-      // con todos los abonos anteriores ya aplicados.
-
-      const intConAbono = []; // interés simulado por cuota (con abonos)
 
       // Cuota 1: período irregular hardcodeado — el abono de cuota 0 reduce saldo
       // antes de que cuota 1 calcule su interés (si hubiera abono en cuota 0).
@@ -2076,12 +2130,6 @@ function calcRows() {
         // Plan base: sin ningún abono
         const intSinAbonos = simularInteresesTotales({});
 
-        // Plan con todos los abonos: ahorro total
-        const abonosCompletos = {};
-        for (const idx of abonoIndices) abonosCompletos[idx] = rows[idx].abono;
-        const intConTodosAbonos = simularInteresesTotales(abonosCompletos);
-        const ahorroTotal = Math.max(0, intSinAbonos - intConTodosAbonos);
-
         // Distribuir el ahorro marginal entre las cuotas con abono
         // para que la columna de la tabla muestre el aporte de cada abono.
         // El ahorro marginal del abono i = ahorro_con_abonos[0..i] - ahorro_con_abonos[0..i-1]
@@ -2106,6 +2154,17 @@ function calcRows() {
 // Ejecutar con: runTests() en la consola del navegador.
 // También disponible en UI: botón "🧪 Tests" en la barra de export.
 function runTests() {
+  // Los tests leen `state` vía calcRows(): se corren con un estado limpio
+  // temporal para que tus pagos/abonos reales no produzcan falsos fallos.
+  const _stateReal = state;
+  state = emptyState();
+  try {
+    return _runTestsCore();
+  } finally {
+    state = _stateReal;
+  }
+}
+function _runTestsCore() {
   const results = [];
   let passed = 0, failed = 0;
 
@@ -2133,10 +2192,11 @@ function runTests() {
     Math.round(TASA_DIARIA * 1e9), Math.round((0.0175 / 30) * 1e9), 0);
 
   // ── Test 3: calcIntSimple — interés con saldo y días conocidos ────────────
-  // $21.050.000 × (21/360) × 30 días = $21.050.000 × 0.0175 = $368.375
-  const intSimpleEsperado = Math.round(21050000 * TASA_DIARIA) * 30;
-  assert('calcIntSimple(21.05M, 30 días)',
-    calcIntSimple(21050000, 30), intSimpleEsperado, 0);
+  // $21.050.000 × 0,0175 = $368.375 sin redondeo, pero el banco redondea el
+  // interés diario a pesos enteros: round(21.050.000 × 0,0175 ÷ 30) = $12.279/día
+  // → 12.279 × 30 = $368.370 (valor literal, no recalculado con la misma fórmula).
+  assert('calcIntSimple(21.05M, 30 días) == $368.370',
+    calcIntSimple(21050000, 30), 368370, 0);
 
   // ── Test 4: calcIntSimple — 0 días devuelve 0 ────────────────────────────
   assert('calcIntSimple(any, 0) == 0', calcIntSimple(21050000, 0), 0, 0);
@@ -2409,40 +2469,32 @@ function renderSavingsBanner(rows) {
 }
 
 // ── METRICS ───────────────────────────────────────────────────────────────────
-function renderMetrics(rows) {
-  let totPagado=0, totCap=0, totIntReal=0, saldoPend=PRESTAMO_INICIAL;
-  let cuotasPag=0, totAbonos=0;
-
-  for (let i=0; i<rows.length; i++) {
-    const p=state.pagos[i], r=rows[i];
-    if (p && r.cap > 0) {
-      // Cuota pagada: acumular capital de cuota, interés y totales
-      if (p.pagada) {
-        totPagado += r.totalReal;
-        totCap += r.cap;
-        totIntReal += r.int;
-        cuotasPag++;
-      }
-      // Abono: independiente del estado de pago de la cuota
-      if ((p.abono || 0) > 0) {
-        totAbonos += r.abono;
-        totCap += r.abono;
-      }
-    }
-  }
-
-  // El saldo real es el de la última fila activa (calcRows ya lo calcula correctamente
-  // incluyendo abonos independientemente de si la cuota está pagada o no).
-  // Buscamos el saldo de la última fila que tenga cuota pagada o abono registrado.
-  // Se recorre hacia adelante: cuota pagada → saldo de la tabla; abono sin cuota
-  // pagada → baja solo el abono (no el capital de una cuota aún no pagada).
-  saldoPend = PRESTAMO_INICIAL;
-  for (let i=0; i<rows.length; i++) {
-    const p=state.pagos[i], r=rows[i];
+// Cifras acumuladas compartidas por la vista completa y el resumen, para que
+// "Total pagado", "Saldo pendiente" y "Capital amortizado" siempre cuadren.
+function calcResumen(rows) {
+  let totPagado = 0, totCap = 0, totIntReal = 0, totAbonos = 0, cuotasPag = 0;
+  let saldoPend = PRESTAMO_INICIAL;
+  for (let i = 0; i < rows.length; i++) {
+    const p = state.pagos[i], r = rows[i];
     if (!p || r.cap <= 0) continue;
-    if (p.pagada) saldoPend = r.saldoCalc;
-    else if ((p.abono||0) > 0) saldoPend = Math.max(0, saldoPend - p.abono);
+    const abono = p.abono || 0;
+    if (p.pagada) {
+      totPagado += r.totalReal;            // ya incluye el abono de esta cuota
+      totCap += r.cap;
+      totIntReal += r.int;
+      cuotasPag++;
+      saldoPend = r.saldoCalc;
+    } else if (abono > 0) {
+      totPagado += r.abono;                // abono pagado aunque la cuota no esté marcada
+      saldoPend = Math.max(0, saldoPend - abono);
+    }
+    if (abono > 0) { totAbonos += r.abono; totCap += r.abono; }
   }
+  return { totPagado, totCap, totIntReal, totAbonos, cuotasPag, saldoPend };
+}
+
+function renderMetrics(rows) {
+  const { totPagado, totCap, totIntReal, totAbonos, cuotasPag, saldoPend } = calcResumen(rows);
 
   // Cuotas efectivas: solo las que aplican (excluye las post-liquidación por abonos a capital)
   const cuotasEfect = rows.filter(r => !r.esPostLiquidacion).length;
@@ -3084,7 +3136,7 @@ function togglePago(i, el) {
   const rows = calcRows();
   if (rows[i] && rows[i].esPostLiquidacion) {
     el.checked = false;
-    return;
+    return false;
   }
   state.pagos[i].pagada = el.checked;
   if (!el.checked) state.pagos[i].fecha = ''; // al volver a marcarla se usa la fecha de ese momento
@@ -3098,25 +3150,27 @@ function togglePago(i, el) {
   } else {
     showToast(`Cuota ${i+1} desmarcada`, 'info');
   }
+  return true;
 }
 function setFecha(i, v) {
   if (v) {
     const d = parseDate(v);
     const today = todayUTC();
     if (d < FECHA_INICIO) {
-      showAlert('La fecha de pago no puede ser anterior al inicio del préstamo (12 mar 2026).');
-      render(); return;
+      showAlert('La fecha de pago no puede ser anterior al inicio del préstamo (' + FECHA_INICIO_LABEL + ').');
+      render(); return false;
     }
     if (d > today) {
       showAlert('La fecha de pago no puede ser posterior a hoy. Para fechas futuras deja el campo en blanco.');
-      render(); return;
+      render(); return false;
     }
   }
   state.pagos[i].fecha = v; saveState(); render();
+  return true;
 }
 function setValor(i, v)  { state.pagos[i].valor = v; saveState(); render(); }
-function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); }
-function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); }
+function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); return true; }
+function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); return true; }
 // Máximo que se puede abonar a la cuota idx: el capital de la propia cuota se
 // amortiza primero, así que el abono solo puede cubrir lo que quede después.
 function abonoMaximo(idx, rows) {
@@ -3131,7 +3185,7 @@ function validarFechaAbono(fechaStr, idxCuota) {
   if (!fechaStr) return null; // fecha opcional — sin valor es OK
   const d = parseDate(fechaStr);
   if (toUTC(d) < toUTC(FECHA_INICIO)) {
-    return `La fecha del abono (${fechaStr}) no puede ser anterior al inicio del préstamo (12 mar 2026).`;
+    return `La fecha del abono (${fechaStr}) no puede ser anterior al inicio del préstamo (${FECHA_INICIO_LABEL}).`;
   }
   const hoy = todayUTC();
   if (toUTC(d) > toUTC(hoy)) {
@@ -3168,10 +3222,10 @@ function _doAplicarAbono(cuota, valor, fechaAbonoStr) {
     const idx2 = parseInt(cuota);
     const rows2 = calcRows();
     if (valor > abonoMaximo(idx2, rows2)) {
-      showToast(`El abono supera el saldo disponible`, 'error', 5000); return;
+      showToast(`El abono supera el saldo disponible`, 'error', 5000); return false;
     }
     const errF = validarFechaAbono(fechaAbonoStr, idx2);
-    if (errF) { showAlert(errF); return; }
+    if (errF) { showAlert(errF); return false; }
   }
   const pc = state.pagos[parseInt(cuota)];
   // Solo se guarda UNA fecha por cuota. Si ya había un abono con fecha, se conserva
@@ -3190,12 +3244,14 @@ function _doAplicarAbono(cuota, valor, fechaAbonoStr) {
   document.getElementById('abonoImpact').className = 'abono-impact';
   saveState(); render();
   showToast(`Abono de $${valor.toLocaleString('es-CO')} aplicado a cuota ${parseInt(cuota)+1}`, 'success');
+  return true;
 }
 function resetAll() {
   showConfirm('¿Reiniciar todos los datos? Esta acción no se puede deshacer.', () => {
-    state = { pagos: Array(PLAZO_MESES).fill(null).map(()=>({pagada:false,fecha:'',valor:'',abono:0,abonoFecha:'',nota:'',gmfCobrado:true})) };
+    state = emptyState();
     saveState(); render();
     showToast('Todos los datos reiniciados', 'info');
+    addLog('reset', '<strong>Todos los datos reiniciados</strong>');
   });
 }
 function setFilter(f, btn) {
@@ -3228,7 +3284,7 @@ async function exportBackup() {
     prestamo: {
       inicial: PRESTAMO_INICIAL,
       tasaMensual: TASA_MENSUAL,
-      fechaInicio: '2026-03-12',
+      fechaInicio: FECHA_INICIO_ISO,
       plazoMeses: PLAZO_MESES
     },
     state: state
@@ -3261,7 +3317,7 @@ function importBackup(event) {
   const file = event.target.files[0];
   event.target.value = ''; // allow re-selecting same file
   if (!file) return;
-  if (!file.name.endsWith('.json')) {
+  if (!file.name.toLowerCase().endsWith('.json')) {
     showBackupToast('El archivo debe ser .json', 'error'); return;
   }
   const reader = new FileReader();
@@ -3282,7 +3338,7 @@ function importBackup(event) {
           (pr.inicial !== undefined && pr.inicial !== PRESTAMO_INICIAL) ||
           (pr.tasaMensual !== undefined && pr.tasaMensual !== TASA_MENSUAL) ||
           (pr.plazoMeses !== undefined && pr.plazoMeses !== PLAZO_MESES) ||
-          (pr.fechaInicio !== undefined && pr.fechaInicio !== '2026-03-12');
+          (pr.fechaInicio !== undefined && pr.fechaInicio !== FECHA_INICIO_ISO);
         if (distinto) {
           showBackupToast('El backup es de un préstamo con otros parámetros (monto, tasa, plazo o fecha de inicio). Importación cancelada.', 'error'); return;
         }
@@ -3305,14 +3361,15 @@ function importBackup(event) {
           showBackupToast('El backup está corrupto (checksum inválido). Importación cancelada.', 'error'); return;
         }
       }
+      // Normaliza el estado del backup (misma validación que local/remoto)
+      const cleanState = sanitizeState(parsed.state);
+      if (!cleanState) {
+        showBackupToast('El backup tiene datos con formato inválido', 'error'); return;
+      }
       // Confirm before overwriting
       const fecha = parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString('es-CO') : 'fecha desconocida';
       showConfirm(`¿Restaurar backup del ${fecha}?\n\nSe reemplazarán todos los datos actuales.`, () => {
-        // Migrate: ensure nota field exists
-        state = {
-          ...parsed.state,
-          pagos: parsed.state.pagos.map(p => ({nota:'', abono:0, abonoFecha:'', ...p}))
-        };
+        state = cleanState;
         saveState();
         render();
         showBackupToast('Datos restaurados correctamente', 'success');
@@ -3399,18 +3456,27 @@ function showBackupToast(msg, type) {
 }
 
 // ── EXPORT CSV ────────────────────────────────────────────────────────────────
+// Celda CSV segura: comillas dobles escapadas, saltos de línea entre comillas
+// y neutralización de fórmulas (=, +, -, @) para que Excel no las ejecute.
+function csvCell(v) {
+  let t = (v === null || v === undefined) ? '' : String(v);
+  if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(t)) t = "'" + t;
+  if (/[",\n\r]/.test(t)) t = '"' + t.replace(/"/g, '""') + '"';
+  return t;
+}
+
 function exportCSV() {
   const rows = calcRows();
   const headers = ['#','Fecha Prog','Estado','Capital','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago','Nota'];
-  const lines = [headers.join(',')];
+  const lines = [headers.map(csvCell).join(',')];
   rows.forEach((r,i) => {
     const p = state.pagos[i];
     lines.push([
       i+1, FECHAS_LABEL[i], p.pagada?'Pagada':'Pendiente',
       r.cap, r.intReal, r.dias,
       r.ahorroAbono, r.cuota, r.gmf, r.totalReal, r.saldoCalc,
-      p.fecha, (p.nota||'').replace(/,/g,' ')
-    ].join(','));
+      p.fecha, p.nota || ''
+    ].map(csvCell).join(','));
   });
   const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8;'});
   const url  = URL.createObjectURL(blob);
@@ -3452,18 +3518,19 @@ function _commitAbonoModal(val) {
     const saldoDisponible = abonoMaximo(abonoEditIdx, rows);
     if (val > saldoDisponible) {
       showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
-      return;
+      return false;
     }
   }
   const fechaEditStr = document.getElementById('abonoEditFecha').value || '';
   const errFechaEdit = validarFechaAbono(fechaEditStr, abonoEditIdx);
-  if (errFechaEdit) { showAlert(errFechaEdit); return; }
+  if (errFechaEdit) { showAlert(errFechaEdit); return false; }
   const idxSnapshot = abonoEditIdx;
   state.pagos[idxSnapshot].abono = val;
   state.pagos[idxSnapshot].abonoFecha = val > 0 ? fechaEditStr : '';
   saveState(); render();
   closeAbonoModal();
   showToast(val > 0 ? `Abono de $${val.toLocaleString('es-CO')} guardado en cuota ${idxSnapshot+1}` : `Abono eliminado de cuota ${idxSnapshot+1}`, 'success');
+  return true;
 }
 document.addEventListener('DOMContentLoaded', () => {
   initFirebaseSync();
@@ -3676,6 +3743,19 @@ function initCuotaTexts() {
   const abonoFmt   = '$' + ABONO_MINIMO.toLocaleString('es-CO');
   const cincoFmt   = '$' + Math.round(CUOTA_BASE * 0.5).toLocaleString('es-CO');
 
+  // Fechas de inicio y primera cuota: salen de FECHA_INICIO_LABEL / FECHAS_LABEL
+  const sinAnio = t => t.replace(/\s+\d{4}$/, '');
+  const fechasTxt = {
+    'inicio':         FECHA_INICIO_LABEL,
+    'primera':        FECHAS_LABEL[0],
+    'inicio-corta':   sinAnio(FECHA_INICIO_LABEL),
+    'primera-corta':  sinAnio(FECHAS_LABEL[0])
+  };
+  document.querySelectorAll('[data-fecha]').forEach(el => {
+    const t = fechasTxt[el.dataset.fecha];
+    if (t) el.textContent = t;
+  });
+
   // Pill plazo
   const pillPlazo = document.getElementById('pillPlazo');
   if (pillPlazo) pillPlazo.textContent = `${PLAZO_MESES} meses`;
@@ -3719,7 +3799,7 @@ const LOG_SK = 'loan_tracker_jfk_v4_log';
 function loadLog() {
   try {
     const s = localStorage.getItem(LOG_SK);
-    return s ? JSON.parse(s) : [];
+    return s ? (sanitizeAuditLog(JSON.parse(s)) || []) : [];
   } catch(e) {
     _dbg('loadLog error:', e);
     return [];
@@ -3746,6 +3826,15 @@ function addLog(type, msg, val) {
   renderLog();
 }
 
+// Solo se permite <strong> en los mensajes del log; todo lo demás se escapa.
+// Se aplica al renderizar, así también protege entradas ya guardadas o
+// llegadas desde Firestore.
+function logSafeMsg(m) {
+  return String(m == null ? '' : m)
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&lt;strong&gt;/g, '<strong>').replace(/&lt;\/strong&gt;/g, '</strong>');
+}
+
 function renderLog() {
   const list = document.getElementById('logList');
   if (!list) return;
@@ -3762,12 +3851,15 @@ function renderLog() {
     note:   '<i class="fa-solid fa-note-sticky"></i>',
     gmf:    '<i class="fa-solid fa-receipt"></i>',
   };
-  list.innerHTML = auditLog.map(e => `
+  list.innerHTML = auditLog.map(e => {
+    const type = icons[e.type] ? e.type : 'edit';
+    return `
     <div class="log-entry">
-      <div class="log-time">${e.time}</div>
-      <div class="log-icon ${e.type}">${icons[e.type] || '<i class="fa-solid fa-circle-dot"></i>'}</div>
-      <div class="log-msg">${e.msg}${e.val ? ` <span class="log-val">${e.val}</span>` : ''}</div>
-    </div>`).join('');
+      <div class="log-time">${escapeHtml(e.time)}</div>
+      <div class="log-icon ${type}">${icons[type]}</div>
+      <div class="log-msg">${logSafeMsg(e.msg)}${e.val ? ` <span class="log-val">${escapeHtml(e.val)}</span>` : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 function clearLog() {
@@ -3885,63 +3977,67 @@ function submitPinModal() {
 (function installWrappers() {
   const _origTogglePago = togglePago;
   togglePago = function(i, el) {
-    if (readOnly) { el.checked = !el.checked; showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return; }
-    _origTogglePago(i, el);
+    if (readOnly) { el.checked = !el.checked; showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return false; }
+    if (!_origTogglePago(i, el)) return false;   // rechazada: no se registra
     const cuota = i + 1;
     addLog('paid',
       el.checked
         ? `Cuota <strong>${cuota}</strong> marcada como <strong>pagada</strong>`
         : `Cuota <strong>${cuota}</strong> desmarcada`,
-      el.checked ? fmt(state.pagos[i].valor || 0) : '');
+      el.checked ? fmt(calcRows()[i].totalReal) : '');
+    return true;
   };
 
   const _origSetFecha = setFecha;
   setFecha = function(i, v) {
-    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
-    _origSetFecha(i, v);
-    if (v) addLog('edit', `Fecha pago cuota <strong>${i+1}</strong> → <strong>${v}</strong>`);
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return false; }
+    if (!_origSetFecha(i, v)) return false;
+    if (v) addLog('edit', `Fecha pago cuota <strong>${i+1}</strong> → <strong>${escapeHtml(v)}</strong>`);
+    return true;
   };
 
   const _origSetNota = setNota;
   setNota = function(i, v) {
-    if (readOnly) return;
-    _origSetNota(i, v);
-    if (v) addLog('note', `Nota cuota <strong>${i+1}</strong>: "${v}"`);
+    if (readOnly) return false;
+    if (!_origSetNota(i, v)) return false;
+    if (v) addLog('note', `Nota cuota <strong>${i+1}</strong>: "${escapeHtml(v)}"`);
+    return true;
   };
 
   const _origSetGmf = setGmfCobrado;
   setGmfCobrado = function(i, v) {
-    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
-    _origSetGmf(i, v);
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return false; }
+    if (!_origSetGmf(i, v)) return false;
     addLog('gmf', `GMF cuota <strong>${i+1}</strong>: ${v ? 'cobrado' : 'no cobrado'}`);
+    return true;
   };
 
   const _origDoAbono = _doAplicarAbono;
   _doAplicarAbono = function(cuota, valor, fechaAbonoStr) {
-    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
-    _origDoAbono(cuota, valor, fechaAbonoStr);
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return false; }
+    if (!_origDoAbono(cuota, valor, fechaAbonoStr)) return false;
     addLog('abono', `Abono a capital cuota <strong>${parseInt(cuota)+1}</strong>`, fmt(valor));
+    return true;
   };
 
   const _origCommitModal = _commitAbonoModal;
   _commitAbonoModal = function(val) {
-    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return; }
-    const idxBefore = abonoEditIdx;
-    _origCommitModal(val);
+    if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return false; }
+    const idxBefore = abonoEditIdx;   // el original cierra el modal y resetea el índice
+    if (!_origCommitModal(val)) return false;
     if (val > 0) addLog('abono', `Abono editado cuota <strong>${idxBefore+1}</strong>`, fmt(val));
     else addLog('edit', `Abono eliminado cuota <strong>${idxBefore+1}</strong>`);
+    return true;
   };
 
+  // resetAll registra su propio log dentro del callback de confirmación.
   const _origResetAll = resetAll;
   resetAll = function() {
     if (readOnly) { showToast('Modo solo lectura activo — desbloquea primero', 'warn'); return; }
     _origResetAll();
-    addLog('reset', '<strong>Todos los datos reiniciados</strong>');
   };
 })();
 
-// Log initial load
-addLog('import', 'Aplicación cargada', '');
 
 // ── VIEW MODE ──────────────────────────────────────────────────────────────────
 let miniChart = null;
@@ -3974,17 +4070,7 @@ function renderSummaryView() {
   bannerSlot.innerHTML = origBanner ? origBanner.outerHTML : '';
 
   // 4 key metrics
-  let totPagado = 0, saldoPend = PRESTAMO_INICIAL, cuotasPag = 0, totIntReal = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const p = state.pagos[i], r = rows[i];
-    if (p && p.pagada && r.cap > 0) {
-      totPagado += r.totalReal; totIntReal += r.int; cuotasPag++;
-    }
-  }
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const p = state.pagos[i], r = rows[i];
-    if (p && (p.pagada || (p.abono || 0) > 0) && r.cap > 0) { saldoPend = r.saldoCalc; break; }
-  }
+  const { totPagado, totIntReal, cuotasPag, saldoPend } = calcResumen(rows);
   const pct = Math.round((PRESTAMO_INICIAL - saldoPend) / PRESTAMO_INICIAL * 100);
   const cuotasEfect = rows.filter(r => !r.esPostLiquidacion).length;
 
