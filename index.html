@@ -1125,7 +1125,7 @@ body.view-summary .full-view { display: none; }
                         360<br>
                         <span>Interés por período:</span> siempre sobre los días
                         programados del período.<br>
-                        El banco cobra el período completo sin importar si pagás
+                        El banco cobra el período completo sin importar si pagas
                         antes o después.<br>
                         <span style="color:var(--green)">El ahorro real viene de
                           abonos a capital</span>, que reducen el saldo base de
@@ -1576,6 +1576,11 @@ const FS_DOC_PATH = ['prestamoJFK', 'data']; // colección/documento en Firestor
 
 let fbApp = null, fbAuth = null, fbDb = null;
 let _applyingRemote = false; // evita que el listener re-dispare saveState()
+// Última versión local confirmada por Firestore (persistida para sobrevivir recargas).
+// Sirve para avisar cuando la nube trae algo más nuevo y tenías ediciones sin subir.
+const SYNC_SK = SK + '_synced';
+function getLastSyncedTs() { try { return parseInt(localStorage.getItem(SYNC_SK)) || 0; } catch(_) { return 0; } }
+function setLastSyncedTs(ts) { try { if (ts > getLastSyncedTs()) localStorage.setItem(SYNC_SK, String(ts)); } catch(_) {} }
 
 function fbConfigured() {
   return firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PEGA_TU');
@@ -1626,6 +1631,10 @@ function attachFirestoreListener() {
       return;
     }
 
+    if (remote.state && remoteTs > localTs && localTs > getLastSyncedTs()) {
+      showToast('Otro dispositivo guardó cambios más nuevos: se reemplazaron ediciones tuyas que no se habían sincronizado.', 'warn', 8000);
+    }
+    if (remote.state) setLastSyncedTs(remoteTs);
     _applyingRemote = true;
     if (remote.state) {
       state = remote.state;
@@ -1646,11 +1655,12 @@ function pushStateToFirestore() {
   if (!fbDb || _applyingRemote) return;
   try {
     const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
+    const tsEnviado = (state && state._updatedAt) || 0;
     ref.set({
       state: state,
       auditLog: (typeof auditLog !== 'undefined' ? auditLog : []),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(e => {
+    }, { merge: true }).then(() => setLastSyncedTs(tsEnviado)).catch(e => {
       _dbg('Error guardando en Firestore:', e);
       showToast('No se pudo sincronizar con la nube (se guardó local).', 'error', 5000);
     });
@@ -1818,7 +1828,7 @@ function calcRowDates(i, prevDate) {
   const payDate     = fechaPagada || fechaProg;
 
   // diasProg: días del período según fecha programada (base del interés del banco).
-  // El banco siempre cobra interés sobre diasProg — no importa si pagás antes o después
+  // El banco siempre cobra interés sobre diasProg — no importa si pagas antes o después
   // de la fecha programada para el cálculo de la cuota actual.
   const diasProg = Math.max(0, daysBetween30_360(prevDate, fechaProg));
 
@@ -1829,10 +1839,10 @@ function calcRowDates(i, prevDate) {
 // El interés ya viene precalculado en AMORT_CALC con la fórmula exacta del banco.
 // Solo lo retornamos para que calcRows() lo use consistentemente.
 function calcRowInterest(saldo, cap, dates) {
-  const intTabla = calcIntSimple(saldo, dates.diasProg);
-  const intReal  = calcIntSimple(saldo, dates.diasProg);
-  const ahorro   = Math.max(0, intTabla - intReal);
-  return { intReal, intTabla, ahorro };
+  // El banco cobra siempre el período programado completo: interés real == interés
+  // de tabla, y por lo tanto no hay ahorro por pagar antes (solo por abonos a capital).
+  const intReal = calcIntSimple(saldo, dates.diasProg);
+  return { intReal, intTabla: intReal, ahorro: 0 };
 }
 
 // ── calcRowLiquidation: detecta si esta cuota es/estaba post-liquidación ─────
@@ -2007,46 +2017,6 @@ function calcRows() {
       // antes de que cuota 1 calcule su interés (si hubiera abono en cuota 0).
       // En la práctica los abonos suelen ser en cuotas posteriores, pero lo
       // calculamos correctamente de todas formas.
-      let saldoSim = PRESTAMO_INICIAL - (rows[0].abono || 0);
-      intConAbono.push(AMORT_CALC[0].int); // cuota 1: siempre interés hardcodeado
-
-      // Simular cuotas 2 a 36 con el saldo acumulando abonos
-      saldoSim = SALDO1 - (rows[1].abono || 0); // SALDO1 ya descontó cap de cuota 1
-      // Nota: si hubo abono en cuota 0 (antes de cuota 1), SALDO1 no lo refleja.
-      // Recalculamos partiendo desde el saldo real post-cuota1-con-abono.
-      {
-        // Recalcular desde el principio para ser exactos con múltiples abonos
-        let s = PRESTAMO_INICIAL;
-        // Cuota 1: capital hardcodeado + abono de cuota 0
-        s = s - CUOTA1_CAP - (rows[0].abono || 0);
-        s = Math.max(0, s);
-
-        for (let i = 1; i < PLAZO_MESES; i++) {
-          // Aplicar abono de cuota anterior (reduce saldo antes de calcular interés)
-          // El abono de la cuota i baja el saldo que entra al siguiente período.
-          // Ya lo descontamos al avanzar saldo al final del loop.
-
-          if (s <= 0) {
-            // Préstamo ya liquidado — las cuotas restantes no tienen interés
-            intConAbono.push(0);
-            continue;
-          }
-
-          let intI;
-          if (i < PLAZO_MESES - 1) {
-            // Cuotas regulares 2-35: misma fórmula exacta del banco
-            intI = calcInteresBANCO(s);
-            const capI = CUOTA_NETA - intI;
-            s = Math.max(0, s - capI - (rows[i].abono || 0));
-          } else {
-            // Cuota 36 (cierre): interés sobre el saldo restante
-            intI = calcInteresBANCO(s);
-            s = 0;
-          }
-          intConAbono.push(intI);
-        }
-      }
-
       // ── Calcular ahorro por diferencia de intereses ─────────────────────────
       // El ahorro de cada abono = Σ(int_original[k] - int_con_abono[k]) para k > idx_abono.
       // En lugar de atribuirlo cuota a cuota, calculamos el ahorro total acumulado
@@ -2180,7 +2150,6 @@ function runTests() {
     daysBetween30_360(new Date('2026-03-12T00:00:00Z'), new Date('2026-05-01T00:00:00Z')), 49, 0);
 
   // ── Test 7: calcRows — total de filas = PLAZO_MESES ────────────────────────
-  const testState = JSON.parse(JSON.stringify(state));
   const rowsSnap  = calcRows();
   assert('calcRows produce PLAZO_MESES filas', rowsSnap.length, PLAZO_MESES, 0);
 
@@ -2354,9 +2323,9 @@ function renderTicker(rows) {
         lastPaidDate = fechaProgCuota;
       }
     } else if ((p.abono || 0) > 0 && !r.esPostLiquidacion) {
-      // Abono registrado sin cuota pagada: el saldo baja pero el interés sigue corriendo
-      // desde la misma fecha base. El saldo ya está calculado en r.saldoCalc.
-      saldo = r.saldoCalc;
+      // Abono registrado sin cuota pagada: baja SOLO el abono (el capital de la cuota
+      // aún no se ha amortizado), sobre el saldo real acumulado hasta ahora.
+      saldo = Math.max(0, saldo - p.abono);
     }
   }
 
@@ -2411,7 +2380,7 @@ function renderSavingsBanner(rows) {
   const totalAbonos = rows.reduce((s,r) => s + (r.abono||0), 0);
   if (totalAhorroAbono > 0) {
     banner.className='savings-banner positive';
-    title.className='savings-title green'; title.textContent='¡Ahorrás con tus abonos a capital!';
+    title.className='savings-title green'; title.textContent='¡Ahorras con tus abonos a capital!';
     amount.style.color='var(--green)'; amount.textContent=fmt(totalAhorroAbono);
     desc.textContent='Interés total que te ahorras gracias a los abonos a capital (cuotas eliminadas + reducción en cuotas futuras)';
   } else if (totalAbonos > 0) {
@@ -2425,7 +2394,7 @@ function renderSavingsBanner(rows) {
     title.className='savings-title'; title.style.color='var(--text)';
     title.textContent='Sin abonos a capital registrados';
     amount.textContent=''; amount.style.color='';
-    desc.textContent='Hacé abonos a capital para reducir el saldo y pagar menos interés en los períodos siguientes.';
+    desc.textContent='Haz abonos a capital para reducir el saldo y pagar menos interés en los períodos siguientes.';
   }
 
   stats.innerHTML = totalAbonos > 0 ? `
@@ -2465,13 +2434,14 @@ function renderMetrics(rows) {
   // El saldo real es el de la última fila activa (calcRows ya lo calcula correctamente
   // incluyendo abonos independientemente de si la cuota está pagada o no).
   // Buscamos el saldo de la última fila que tenga cuota pagada o abono registrado.
+  // Se recorre hacia adelante: cuota pagada → saldo de la tabla; abono sin cuota
+  // pagada → baja solo el abono (no el capital de una cuota aún no pagada).
   saldoPend = PRESTAMO_INICIAL;
-  for (let i=rows.length-1; i>=0; i--) {
+  for (let i=0; i<rows.length; i++) {
     const p=state.pagos[i], r=rows[i];
-    if (p && (p.pagada || (p.abono||0) > 0) && r.cap > 0) {
-      saldoPend = r.saldoCalc;
-      break;
-    }
+    if (!p || r.cap <= 0) continue;
+    if (p.pagada) saldoPend = r.saldoCalc;
+    else if ((p.abono||0) > 0) saldoPend = Math.max(0, saldoPend - p.abono);
   }
 
   // Cuotas efectivas: solo las que aplican (excluye las post-liquidación por abonos a capital)
@@ -2967,6 +2937,7 @@ function render() {
 function buildSaldoTimeline() {
   const rows = calcRows();
   const events = [{ date: FECHA_INICIO, saldo: PRESTAMO_INICIAL, label: 'Desembolso inicial' }];
+  let saldoReal = PRESTAMO_INICIAL; // saldo efectivo acumulado (cuotas pagadas + abonos)
 
   for (let i = 0; i < PLAZO_MESES; i++) {
     const p = state.pagos[i], r = rows[i];
@@ -2975,18 +2946,19 @@ function buildSaldoTimeline() {
       // Cuota pagada: el saldo baja a r.saldoCalc (ya incluye capital + abono
       // de esta misma cuota, si lo hubo). OJO: si pagaste ANTES de la fecha
       // programada, el "reloj" de interés no arranca antes de esa fecha — el
-      // banco cobra el período completo sin importar si pagás antes o después
+      // banco cobra el período completo sin importar si pagas antes o después
       // (misma regla que ya usa renderTicker() para el saldo de hoy). Solo un
       // pago TARDÍO adelanta la fecha efectiva, porque ahí sí siguió corriendo
       // interés sobre el saldo viejo hasta el día real de pago.
       const fechaReal = p.fecha ? parseDate(p.fecha) : r.fechaProg;
       const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
-      events.push({ date: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
+      saldoReal = r.saldoCalc;
+      events.push({ date: fechaEfectiva, saldo: saldoReal, label: `Cuota ${i+1} pagada` });
     } else if ((p.abono || 0) > 0 && p.abonoFecha) {
       // Abono registrado sin marcar la cuota como pagada: el saldo baja solo
       // por el abono (el capital de la cuota aún no se ha amortizado).
-      const saldoConAbono = Math.max(0, r.saldoAntes - p.abono);
-      events.push({ date: parseDate(p.abonoFecha), saldo: saldoConAbono, label: `Abono cuota ${i+1}` });
+      saldoReal = Math.max(0, saldoReal - p.abono);
+      events.push({ date: parseDate(p.abonoFecha), saldo: saldoReal, label: `Abono cuota ${i+1}` });
     }
   }
 
@@ -3070,10 +3042,10 @@ function previewAbono() {
   }
   if (cuota !== '' && valor > 0) {
     const previewRows = calcRows();
-    const saldoMax = previewRows[parseInt(cuota)].saldoAntes;
+    const saldoMax = abonoMaximo(parseInt(cuota), previewRows);
     if (valor > saldoMax) {
       maxAlert.style.display = 'block';
-      maxAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Máximo permitido: $${saldoMax.toLocaleString('es-CO')} (saldo actual)`;
+      maxAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Máximo permitido: $${saldoMax.toLocaleString('es-CO')} (saldo tras la cuota)`;
     } else {
       maxAlert.style.display = 'none';
     }
@@ -3103,7 +3075,7 @@ function previewAbono() {
     <div class="calc-row"><span class="ck">Abono al capital</span><span class="cv val-green">${fmt(valor)}</span></div>
     <div class="calc-row"><span class="ck">Interés que ahorras/mes</span><span class="cv val-green">≈ ${fmt(intAhorrado)}</span></div>
     <div class="calc-row"><span class="ck">Cuotas que acorta aprox.</span><span class="cv val-green">≈ ${mesesAhorro} mes${mesesAhorro!==1?'es':''}</span></div>
-    <div class="calc-row"><span class="ck">Nuevo saldo tras abono</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - valor))}</span></div>`;
+    <div class="calc-row"><span class="ck">Nuevo saldo (tras cuota y abono)</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - r.cap - valor))}</span></div>`;
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
@@ -3115,6 +3087,7 @@ function togglePago(i, el) {
     return;
   }
   state.pagos[i].pagada = el.checked;
+  if (!el.checked) state.pagos[i].fecha = ''; // al volver a marcarla se usa la fecha de ese momento
   if (!state.pagos[i].fecha && el.checked) {
     const t = todayUTC();
     state.pagos[i].fecha = `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}-${String(t.getUTCDate()).padStart(2,'0')}`;
@@ -3144,6 +3117,12 @@ function setFecha(i, v) {
 function setValor(i, v)  { state.pagos[i].valor = v; saveState(); render(); }
 function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); }
 function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); }
+// Máximo que se puede abonar a la cuota idx: el capital de la propia cuota se
+// amortiza primero, así que el abono solo puede cubrir lo que quede después.
+function abonoMaximo(idx, rows) {
+  const r = (rows || calcRows())[idx];
+  return Math.max(0, Math.round(r.saldoAntes - r.cap));
+}
 // Valida que la fecha del abono esté entre el inicio del préstamo y hoy.
 // Pagos tardíos (posteriores a la fecha programada de la cuota) son válidos:
 // el usuario puede haber realizado el abono después del vencimiento.
@@ -3173,7 +3152,7 @@ function aplicarAbono() {
   }
   const idx = parseInt(cuota);
   const rows = calcRows();
-  const saldoDisponible = rows[idx].saldoAntes;
+  const saldoDisponible = abonoMaximo(idx, rows);
   if (valor > saldoDisponible) {
     showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
     return;
@@ -3188,14 +3167,23 @@ function _doAplicarAbono(cuota, valor, fechaAbonoStr) {
     fechaAbonoStr = document.getElementById('abonoFecha').value || '';
     const idx2 = parseInt(cuota);
     const rows2 = calcRows();
-    if (valor > rows2[idx2].saldoAntes) {
+    if (valor > abonoMaximo(idx2, rows2)) {
       showToast(`El abono supera el saldo disponible`, 'error', 5000); return;
     }
     const errF = validarFechaAbono(fechaAbonoStr, idx2);
     if (errF) { showAlert(errF); return; }
   }
-  state.pagos[parseInt(cuota)].abono = (state.pagos[parseInt(cuota)].abono||0) + valor;
-  state.pagos[parseInt(cuota)].abonoFecha = fechaAbonoStr;
+  const pc = state.pagos[parseInt(cuota)];
+  // Solo se guarda UNA fecha por cuota. Si ya había un abono con fecha, se conserva
+  // la más reciente (la conservadora para el cálculo de intereses) y se avisa.
+  const fechaPrev = (pc.abono || 0) > 0 ? (pc.abonoFecha || '') : '';
+  let fechaFinal = fechaAbonoStr;
+  if (fechaPrev && fechaPrev !== fechaAbonoStr) {
+    fechaFinal = (!fechaAbonoStr || fechaPrev > fechaAbonoStr) ? fechaPrev : fechaAbonoStr;
+    showToast(`Esta cuota ya tenía un abono: se guarda una sola fecha (${fechaFinal}).`, 'info', 5000);
+  }
+  pc.abono = (pc.abono||0) + valor;
+  pc.abonoFecha = fechaFinal;
   document.getElementById('abonoValor').value = '';
   document.getElementById('abonoFecha').value = '';
   document.getElementById('abonoMinHint').style.display = 'none';
@@ -3286,6 +3274,18 @@ function importBackup(event) {
       }
       if (parsed.state.pagos.length !== PLAZO_MESES) {
         showBackupToast(`El backup no corresponde a ${PLAZO_MESES} cuotas`, 'error'); return;
+      }
+      // El backup debe corresponder a ESTE préstamo (si trae sus parámetros)
+      if (parsed.prestamo) {
+        const pr = parsed.prestamo;
+        const distinto =
+          (pr.inicial !== undefined && pr.inicial !== PRESTAMO_INICIAL) ||
+          (pr.tasaMensual !== undefined && pr.tasaMensual !== TASA_MENSUAL) ||
+          (pr.plazoMeses !== undefined && pr.plazoMeses !== PLAZO_MESES) ||
+          (pr.fechaInicio !== undefined && pr.fechaInicio !== '2026-03-12');
+        if (distinto) {
+          showBackupToast('El backup es de un préstamo con otros parámetros (monto, tasa, plazo o fecha de inicio). Importación cancelada.', 'error'); return;
+        }
       }
       // Verify checksum if present
       if (parsed.checksum) {
@@ -3449,7 +3449,7 @@ function saveAbonoModal() {
 function _commitAbonoModal(val) {
   if (val > 0) {
     const rows = calcRows();
-    const saldoDisponible = rows[abonoEditIdx].saldoAntes;
+    const saldoDisponible = abonoMaximo(abonoEditIdx, rows);
     if (val > saldoDisponible) {
       showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
       return;
@@ -3460,7 +3460,7 @@ function _commitAbonoModal(val) {
   if (errFechaEdit) { showAlert(errFechaEdit); return; }
   const idxSnapshot = abonoEditIdx;
   state.pagos[idxSnapshot].abono = val;
-  state.pagos[idxSnapshot].abonoFecha = fechaEditStr;
+  state.pagos[idxSnapshot].abonoFecha = val > 0 ? fechaEditStr : '';
   saveState(); render();
   closeAbonoModal();
   showToast(val > 0 ? `Abono de $${val.toLocaleString('es-CO')} guardado en cuota ${idxSnapshot+1}` : `Abono eliminado de cuota ${idxSnapshot+1}`, 'success');
@@ -3664,7 +3664,7 @@ function runTestsUI() {
   } else {
     const failNames = results.filter(r=>!r.ok).map(r=>r.name).join(', ');
     showToast(`${failed} test(s) fallaron: ${failNames}`, 'error', 6000);
-    _dbg('[JFK Tests] Resultados:', results);
+    console.warn('[JFK Tests] Resultados:', results);
   }
 }
 
