@@ -2681,10 +2681,10 @@ function renderTable(rows) {
       rowClass = 'row-today';
     } else if (p.pagada && p.fecha) {
       const diasDif = daysBetween(r.fechaProg, parseDate(p.fecha));
-      if (diasDif < -1) {
+      if (diasDif < 0) {
         timingBadge = `<span class="status-badge badge-early">↑ ${Math.abs(diasDif)}d antes</span>`;
         rowClass = 'row-early';
-      } else if (diasDif > 1) {
+      } else if (diasDif > 0) {
         timingBadge = `<span class="status-badge badge-late">↓ ${diasDif}d tarde</span>`;
         rowClass = 'row-late';
       }
