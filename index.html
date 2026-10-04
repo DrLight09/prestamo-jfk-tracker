@@ -679,7 +679,8 @@ body.readonly-mode #tab-log {
   padding: 10px 14px;
   background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
-.view-mode-bar .vmb-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+.view-mode-bar .vmb-label { display: inline-flex; align-items: center; gap: 6px; line-height: 1; font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+.view-mode-bar .vmb-label i { font-size: 12px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 14px; }
 .vmb-pills { display: flex; gap: 5px; }
 .vmb-pill {
   padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border2);
@@ -808,7 +809,7 @@ body.view-summary .full-view { display: none; }
       <!-- VIEW MODE BAR -->
       <div class="view-mode-bar">
         <span class="vmb-label"><i class="fa-solid fa-eye" aria-hidden="true"
-            style="margin-right:5px;color:var(--blue)"></i>Modo de vista</span>
+            style="color:var(--blue)"></i>Modo de vista</span>
         <div class="vmb-pills">
           <button type="button" class="vmb-pill" id="vmb-summary">
             <i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Resumen
