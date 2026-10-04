@@ -278,7 +278,7 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 .info-note-toggle .int-icon{font-size:9px;color:var(--text3);transition:transform 0.2s;}
 .info-note-toggle .int-icon.open{transform:rotate(180deg);}
 .info-note-body{overflow:hidden;max-height:0;transition:max-height 0.3s ease,opacity 0.2s;opacity:0;pointer-events:none;}
-.info-note-body.open{max-height:300px;opacity:1;pointer-events:auto;}
+.info-note-body.open{max-height:460px;opacity:1;pointer-events:auto;}
 
 /* CUOTA #1 NOTE — redesigned */
 .cuota1-note{display:flex;gap:10px;padding:10px 12px;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.18);border-left:3px solid var(--amber);border-radius:var(--radius);margin-bottom:10px;position:relative;}
@@ -348,14 +348,12 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 .modal-regla-box   { font-size:10px; color:var(--text3); margin-bottom:12px; line-height:1.6; }
 .sync-textarea     { width:100%; height:90px; background:var(--bg4); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:var(--mono); font-size:10.5px; padding:8px 10px; outline:none; resize:vertical; line-height:1.5; transition:border-color 0.2s; }
 .sync-textarea:focus { border-color:var(--blue); }
-.sync-textarea:blur  { border-color:var(--border2); }
 .sync-btn-row  { display:flex; gap:7px; margin-top:8px; }
 .sync-error    { display:none; margin-top:7px; font-size:10.5px; color:var(--red); background:var(--red-dim); border:1px solid rgba(240,100,122,0.25); border-radius:6px; padding:6px 9px; }
 .verif-note    { font-size:11px; color:var(--text3); margin-bottom:10px; line-height:1.6; }
 .verif-grid    { max-height:300px; overflow-y:auto; font-size:11px; font-family:var(--mono); }
 .verif-summary { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
 .sv-card-wrap  { margin-bottom:16px; }
-.pe-popover-info { font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.6; }
 ::-webkit-scrollbar-track{background:var(--bg2);}
 ::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:3px;}
 
@@ -460,21 +458,6 @@ body.readonly-mode #tab-log {
 .log-val { font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
 .log-empty { padding: 20px 12px; text-align: center; color: var(--text3); font-size: 11px; }
 #logList { max-height: 320px; overflow-y: auto; }
-
-/* PERIODO EXTENDIDO POPOVER */
-.pe-wrap{position:relative;display:inline-block;}
-.pe-badge{cursor:pointer;user-select:none;}
-.pe-badge:hover{opacity:0.85;}
-.pe-popover{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:9000;
-  width:320px;background:var(--bg3);border:1px solid rgba(245,166,35,0.35);border-radius:var(--radius-lg);
-  padding:13px 15px;box-shadow:0 12px 40px rgba(0,0,0,0.55);pointer-events:none;}
-.pe-popover.open{display:block;pointer-events:auto;}
-.pe-popover::before{content:'';position:absolute;top:-5px;left:50%;transform:translateX(-50%);
-  width:9px;height:9px;background:var(--bg3);border-left:1px solid rgba(245,166,35,0.35);
-  border-top:1px solid rgba(245,166,35,0.35);transform:translateX(-50%) rotate(45deg);}
-.pe-popover-close{position:absolute;top:7px;right:9px;background:none;border:none;color:var(--text3);
-  cursor:pointer;font-size:13px;line-height:1;padding:2px 5px;border-radius:4px;}
-.pe-popover-close:hover{color:var(--text);background:var(--bg5);}
 
 /* ── FADE IN UP ANIMATIONS ───────────────────────────────────────────── */
 @keyframes fadeInUp {
@@ -863,12 +846,6 @@ body.view-summary .full-view { display: none; }
       <!-- FULL VIEW -->
       <div class="full-view">
 
-        <!-- ALERT -->
-        <div class="alert alert-warn" id="alertBox"><i
-            class="fa-solid fa-triangle-exclamation"></i> El valor pagado es
-          menor a la cuota programada. Verifica con la cooperativa el
-          tratamiento del faltante.</div>
-
         <!-- NEXT PAYMENT BANNER -->
         <div class="next-banner upcoming" id="nextBanner">
           <div class="nb-left">
@@ -942,8 +919,8 @@ body.view-summary .full-view { display: none; }
               <div class="savings-title" id="savingsTitle">Sin pagos
                 registrados</div>
               <div class="savings-amount" id="savingsAmount"></div>
-              <div class="savings-desc" id="savingsDesc">Registra fechas reales
-                de pago para ver cuánto ahorras o pagas de más</div>
+              <div class="savings-desc" id="savingsDesc">Registra pagos y abonos
+                a capital para ver cuánto interés ahorras</div>
             </div>
           </div>
           <div class="savings-stats" id="savingsStats"></div>
@@ -1130,7 +1107,9 @@ body.view-summary .full-view { display: none; }
                         <span style="color:var(--green)">El ahorro real viene de
                           abonos a capital</span>, que reducen el saldo base de
                         los siguientes períodos.<br>
-                        <span>Sin penalidad por prepago</span> (cláusula 2)
+                        <span>Sin penalidad por prepago</span> (cláusula 2)<br>
+                        <span>Abonos</span> (pagaré, cláusula Décimo Primera): cada abono paga primero los intereses causados a su fecha y el resto va a capital. El saldo de hoy y "¿Cuánto debo hoy?" usan esa regla con la fecha real del abono; la tabla supone el abono aplicado en la fecha de la cuota elegida (algo más conservadora).<br>
+                        <span style="color:var(--amber)">Al abonar pide "disminución de plazo"</span>: si no lo expresas, la cooperativa lo aplica como disminución de cuota. Págalo directo al crédito, no consignando a la cuenta de ahorros.
                       </div>
                     </div>
                   </div>
@@ -1215,7 +1194,7 @@ body.view-summary .full-view { display: none; }
                     cuánto le debías (o deberás) al banco <span>en cualquier
                       fecha</span>, usando el saldo real vigente ese día — no el
                     saldo de hoy — más el interés generado desde el pago o abono
-                    anterior a esa fecha.</div>
+                    anterior a esa fecha. Si hubo un abono, primero cubre los intereses causados a su fecha y el resto baja el capital (pagaré, cláusula Décimo Primera).</div>
                 </div>
               </div>
             </div>
@@ -1359,7 +1338,7 @@ body.view-summary .full-view { display: none; }
                   <th class="col-extra">Interés</th>
                   <th class="col-extra">Días</th>
                   <th class="col-extra"
-                    title="Interés que te ahorras en el siguiente período gracias al abono a capital">Ahorro
+                    title="Interés total que te ahorras en el resto del plan gracias al abono a capital">Ahorro
                     abono</th>
                   <th class="col-extra">Cuota base</th>
                   <th class="col-extra"
@@ -1460,6 +1439,9 @@ body.view-summary .full-view { display: none; }
 // ── CONSTANTS ──────────────────────────────────────────────────────────────────
 const DEBUG = false; // set true during development to see verbose logs
 function _dbg(...args) { if (DEBUG) console.log(...args); }
+// Declarado aquí (antes de loadState) para evitar la zona muerta temporal:
+// loadState() puede llamar a showToast() durante la carga inicial.
+let _toastTimer = null;
 
 const PRESTAMO_INICIAL = 21050000;
 const PLAZO_MESES      = 36;          // ← única fuente de verdad para el plazo
@@ -2297,6 +2279,22 @@ function _runTestsCore() {
   }
   assert('AMORT_CALC vs BANCO: diff máx cuota normal ≤ $2', maxDiffCuota, 0, 2);
 
+  // ── Tests de saldoEnFecha (deuda en una fecha, regla del pagaré) ──────────
+  // Sin pagos: al 1 may 2026 deben 49 días de interés sobre el desembolso.
+  const e1 = saldoEnFecha(new Date('2026-05-01T00:00:00Z'));
+  assert('saldoEnFecha sin pagos: deuda 1 may = capital + 49 días', e1.deuda, PRESTAMO_INICIAL + 12279 * 49, 0);
+  // Abono de $3M el 10 abr (cuota 1 sin pagar): la deuda baja EXACTAMENTE lo abonado.
+  state.pagos[0].abono = 3000000;
+  state.pagos[0].abonoFecha = '2026-04-10';
+  const e2 = saldoEnFecha(new Date('2026-04-10T00:00:00Z'));
+  assert('saldoEnFecha con abono: deuda = saldo + interés causado − abono',
+    e2.deuda, PRESTAMO_INICIAL + 12279 * 28 - 3000000, 0);
+  // Antes de la fecha del abono, el abono no cuenta.
+  const e3 = saldoEnFecha(new Date('2026-04-09T00:00:00Z'));
+  assert('saldoEnFecha antes del abono: no lo descuenta', e3.saldo, PRESTAMO_INICIAL, 0);
+  state.pagos[0].abono = 0;
+  state.pagos[0].abonoFecha = '';
+
   // ── Reporte en consola ────────────────────────────────────────────────────
   const label = `%c[JFK Tests] ${passed}/${passed+failed} pasados`;
   const style = failed === 0
@@ -2355,21 +2353,21 @@ function renderNextBanner(rows) {
     title.textContent = `Cuota ${nextIdx+1} — ${label} — VENCIDA`;
     const diasVencida30_360 = Math.max(0, daysBetween30_360(fechaP, today));
     const intExtra = calcIntSimple(r.saldoAntes, diasVencida30_360);
-    sub.textContent = `Lleva ${Math.abs(dias)} días calendario vencida · interés extra (30/360): ${fmt(intExtra)}.`;
+    sub.textContent = `Lleva ${Math.abs(dias)} días calendario vencida · interés extra a tasa corriente (30/360): ${fmt(intExtra)}. La mora real se cobra a la tasa máxima legal (pagaré, cláusula Tercera), así que puede ser mayor.`;
     chipCls = 'cc-red';
     cd.innerHTML = `<span class="countdown-chip cc-red"><i class="fa-solid fa-triangle-exclamation"></i> ${Math.abs(dias)} días vencida</span>`;
   } else if (dias <= 5) {
     banner.className = 'next-banner urgent';
     icon.innerHTML = '<i class="fa-solid fa-bell" style="color:var(--amber)"></i>';
     title.textContent = `Cuota ${nextIdx+1} — ${label}`;
-    sub.textContent = `¡Vence muy pronto! Paga antes para ahorrar intereses.`;
+    sub.textContent = `¡Vence muy pronto! Recuerda pagar a tiempo para evitar intereses de mora.`;
     chipCls = 'cc-amber';
     cd.innerHTML = `<span class="countdown-chip cc-amber"><i class="fa-solid fa-bolt"></i> ${dias} días restantes</span>`;
   } else {
     banner.className = 'next-banner upcoming';
     icon.innerHTML = '<i class="fa-regular fa-calendar-days" style="color:var(--blue)"></i>';
     title.textContent = `Cuota ${nextIdx+1} — ${label}`;
-    sub.textContent = `Cada día que esperas, la deuda crece ${fmt(Math.round(r.saldoAntes*TASA_DIARIA))}. Countdown en días calendario · interés calculado con 30/360.`;
+    sub.textContent = `Si no pagas en la fecha programada, cada día extra genera ${fmt(Math.round(r.saldoAntes*TASA_DIARIA))} de interés. Countdown en días calendario · interés calculado con 30/360.`;
     cd.innerHTML = `<span class="countdown-chip cc-blue"><i class="fa-regular fa-clock"></i> ${dias} días restantes</span>`;
   }
 }
@@ -2377,36 +2375,18 @@ function renderNextBanner(rows) {
 // ── TICKER ─────────────────────────────────────────────────────────────────────
 function renderTicker(rows) {
   const today = todayUTC();
-  let saldo = PRESTAMO_INICIAL;
-  let lastPaidDate = FECHA_INICIO;
   let totIntReal = 0;
   let cuotasPagadas = 0;
-
   for (let i = 0; i < PLAZO_MESES; i++) {
-    const p = state.pagos[i], r = rows[i];
-    if (p.pagada) {
-      saldo = r.saldoCalc;
-      totIntReal += r.int;
-      cuotasPagadas++;
-      // El banco reinicia el contador desde la fecha PROGRAMADA, no desde la real.
-      // Si pagaste antes de la fecha prog, el interés no corre hasta esa fecha.
-      const fechaRealPago = p.fecha ? parseDate(p.fecha) : null;
-      const fechaProgCuota = parseDate(FECHAS_PROG[i]);
-      if (fechaRealPago) {
-        lastPaidDate = toUTC(fechaRealPago) >= toUTC(fechaProgCuota) ? fechaRealPago : fechaProgCuota;
-      } else {
-        lastPaidDate = fechaProgCuota;
-      }
-    } else if ((r.abono || 0) > 0 && !r.esPostLiquidacion) {
-      // Abono registrado sin cuota pagada: baja SOLO el abono (el capital de la cuota
-      // aún no se ha amortizado), sobre el saldo real acumulado hasta ahora.
-      saldo = Math.max(0, saldo - r.abono);
-    }
+    if (state.pagos[i].pagada) { totIntReal += rows[i].int; cuotasPagadas++; }
   }
 
-  const diasHoy = Math.max(0, daysBetween30_360(lastPaidDate, today));
-  const intHoy  = Math.round(calcIntSimple(saldo, diasHoy));
-  const deudaHoy = saldo + intHoy;
+  // Misma función que "¿Cuánto debo hoy?": ambos números siempre coinciden.
+  const est = saldoEnFecha(today, rows);
+  const saldo    = est.saldo;
+  const diasHoy  = est.dias;
+  const intHoy   = est.intAcum;
+  const deudaHoy = est.deuda;
 
   document.getElementById('tickerSaldo').textContent = fmt(saldo);
   document.getElementById('tickerSaldoSub').textContent =
@@ -2445,7 +2425,7 @@ function renderSavingsBanner(rows) {
     title.textContent = 'Sin pagos registrados';
     amount.textContent = '';
     amount.style.color = '';
-    desc.textContent = 'Registra fechas reales de pago para ver cuánto ahorras o pagas de más';
+    desc.textContent = 'Registra pagos y abonos a capital para ver cuánto interés ahorras';
     stats.innerHTML = '';
     return;
   }
@@ -2745,8 +2725,6 @@ function renderTable(rows) {
       ? `<button type="button" class="abono-tag-btn has-abono" data-abono-modal="${i}"><i class="fa-solid fa-pen-to-square"></i> +${fmt(r.abono)}</button>${abonoFechaLabel}`
       : `<button type="button" class="abono-tag-btn no-abono" data-abono-modal="${i}"><i class="fa-solid fa-plus"></i> abono</button>`;
 
-    const intClass = 'normal'; // el banco siempre cobra el período completo, sin early/late
-
     const tr = document.createElement('tr');
     tr.className = r.esPostLiquidacion ? 'row-eliminated' : rowClass;
 
@@ -2765,9 +2743,6 @@ function renderTable(rows) {
          </span>`
       : '';
 
-    // ── Si es post-liquidación, mostrar toda la fila opaca ──────────────────
-    const rowStyle = '';
-
     tr.innerHTML = `
       <td data-label="Ok">${checkboxHtml}</td>
       <td data-label="N°" style="font-family:var(--mono);color:var(--text2)">${i+1}</td>
@@ -2778,7 +2753,7 @@ function renderTable(rows) {
       <td class="col-extra" data-label="Capital"><div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px"><span class="num">${r.esPostLiquidacion ? '<span style="color:var(--text3)">$0</span>' : fmt(r.cap)}</span>${r.esPostLiquidacion ? '' : abonoTag}</div></td>
       <td class="col-extra" data-label="Interés real"><span class="num" style="color:var(--text2)">${r.esPostLiquidacion ? '—' : fmt(r.intReal)}</span></td>
       <td class="col-extra" data-label="Días"><span class="num">${r.esPostLiquidacion ? '—' : r.dias}</span></td>
-      <td class="col-extra" data-label="Ahorro abono">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : (r.ahorroAbono > 0 ? `<span class="saving-chip good" title="Ahorro estimado en el siguiente período por este abono a capital">≈ ${fmt(r.ahorroAbono)}</span>` : '<span style="color:var(--text3);font-size:11px">—</span>')}</td>
+      <td class="col-extra" data-label="Ahorro abono">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : (r.ahorroAbono > 0 ? `<span class="saving-chip good" title="Ahorro total estimado en intereses del plan restante por este abono a capital">≈ ${fmt(r.ahorroAbono)}</span>` : '<span style="color:var(--text3);font-size:11px">—</span>')}</td>
       <td class="col-extra" data-label="Cuota base"><span class="num">${r.esPostLiquidacion ? '—' : fmt(r.cuota)}</span></td>
       <td class="col-extra" data-label="GMF"><span class="num" style="color:var(--text2)">${r.esPostLiquidacion ? '—' : (r.gmfCobrado
         ? `<span title="GMF cobrado — haz clic para marcar como no cobrado" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px" data-gmf="${i}" data-gmf-val="false">${fmt(r.gmf)}<i class="fa-solid fa-circle-check" style="color:var(--green);font-size:9px"></i></span>`
@@ -2792,6 +2767,15 @@ function renderTable(rows) {
     tbody.appendChild(tr);
 
   } // end for loop
+
+  // Modo solo lectura: deshabilitar también para teclado (no solo vía CSS).
+  // render() recrea las filas tras cada guardado/sync, así que se reaplica aquí.
+  if (typeof readOnly !== 'undefined' && readOnly) {
+    tbody.querySelectorAll('input, select, textarea, button').forEach(el => {
+      el.setAttribute('tabindex', '-1');
+      el.setAttribute('disabled', '');
+    });
+  }
 } // end renderTable
 
 // ── VERIFICACIÓN BANCO vs CALC ────────────────────────────────────────────────
@@ -2808,6 +2792,31 @@ function toggleSyncPanel() {
   btn.style.background  = open ? 'var(--blue-dim)' : '';
 }
 
+// Separa una línea pegada del banco en columnas. Prioridad de separadores:
+// 1) ';' o tabulador  2) coma (si va seguida de espacio o la línea no tiene espacios)
+// 3) espacios. Así "424.691 601.671" (separado por espacios) ya no se junta en un
+// solo número, y "424,691" (miles con coma) no se parte por la mitad.
+function splitLineBanco(line) {
+  const clean = line.replace(/\$/g, '').trim();
+  let parts;
+  if (/[;\t]/.test(clean)) parts = clean.split(/[;\t]+/);
+  else if (/,\s/.test(clean) || (clean.includes(',') && !/\s/.test(clean))) parts = clean.split(/\s*,\s*/);
+  else parts = clean.split(/\s+/);
+  return parts.map(p => p.trim()).filter(Boolean);
+}
+// Convierte un número en formato colombiano (424.691 / 424.691,50), anglosajón
+// (424,691 / 424,691.50) o simple (424691 / 424691.50) a entero en pesos.
+// Los decimales se redondean; ya no se convierten en dígitos extra.
+function parseNumBanco(tok) {
+  let t = String(tok).replace(/[$\s]/g, '');
+  if (!t) return NaN;
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g, '');
+  else t = t.replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(t)) return NaN;
+  return Math.round(parseFloat(t));
+}
+
 function parseSyncBanco() {
   const raw  = (document.getElementById('syncBancoInput').value || '').trim();
   const errEl = document.getElementById('syncBancoError');
@@ -2820,9 +2829,8 @@ function parseSyncBanco() {
   const MAX_VAL = PRESTAMO_INICIAL * 10;
 
   for (const line of lines) {
-    // Split by comma, semicolon, or tab
-    const parts = line.split(/[,;\t]+/).map(p => p.trim().replace(/[$\s.]/g,'').replace(',',''));
-    const nums  = parts.map(p => parseInt(p.replace(/\./g,''))).filter(n => !isNaN(n) && n >= 0);
+    const parts = splitLineBanco(line);
+    const nums  = parts.map(parseNumBanco).filter(n => !isNaN(n) && n >= 0);
     // We need at least 4 numbers: cuota_num, capital, interes, saldo
     // Also accept 3 numbers without cuota_num: capital, interes, saldo
     let row;
@@ -3001,64 +3009,67 @@ function render() {
 }
 
 // ── SIMULADOR FECHA ───────────────────────────────────────────────────────────
-// ── LÍNEA DE TIEMPO DE SALDOS — para consultar CUALQUIER fecha (pasada o futura) ─
-// Construye la secuencia cronológica de "puntos de quiebre" del saldo: el
-// desembolso inicial, y cada vez que el saldo bajó (por cuota pagada o por un
-// abono a capital con fecha registrada). Con esto, consultar una fecha pasada
-// usa el saldo QUE REALMENTE EXISTÍA en ese momento (no el saldo actual), y
-// consultar una fecha futura proyecta el interés desde el último quiebre real.
-function buildSaldoTimeline() {
-  const rows = calcRows();
-  const events = [{ date: FECHA_INICIO, saldo: PRESTAMO_INICIAL, label: 'Desembolso inicial' }];
-  let saldoReal = PRESTAMO_INICIAL; // saldo efectivo acumulado (cuotas pagadas + abonos)
+// ── ESTADO DE LA DEUDA EN UNA FECHA — ÚNICA FUENTE (ticker y "¿Cuánto debo hoy?") ──
+// Regla del pagaré, cláusula Décimo Primero (Abonos): un abono extra se aplica a
+// capital DESPUÉS de cubrir los intereses causados a la fecha del abono.
+//   · Al abonar el día D: interés causado = saldo × tasa × días(base → D).
+//   · Ese interés se paga primero con el abono; solo el resto baja el capital.
+//   · Desde D el interés corre sobre el nuevo saldo (base = D).
+// Así la deuda total baja exactamente lo abonado (saldo + interés − abono) y ya no
+// se pierde el interés de antes de la fecha del abono.
+// Reglas que se conservan: el reloj de interés de una cuota pagada arranca en la
+// fecha PROGRAMADA (si pagas antes) o la real (si pagas tarde).
+// Un abono SIN fecha se asume hecho en la fecha consultada, solo si esa fecha es
+// hoy o futura (no se sabe cuándo ocurrió, así que no se aplica a fechas pasadas).
+function saldoEnFecha(consultaDate, rowsOpt) {
+  const rows = rowsOpt || calcRows();
+  const X    = toUTC(consultaDate);
+  const hoy  = toUTC(todayUTC());
+  const bruto = (s, desde, hasta) => calcIntSimple(s, Math.max(0, daysBetween30_360(desde, hasta)));
 
+  // Eventos con fecha (cuotas pagadas y abonos fechados) y abonos sin fecha
+  const eventos = [], sinFecha = [];
+  const hayPagadaPosterior = i => state.pagos.some((q, j) => j > i && q.pagada && rows[j].cap > 0);
   for (let i = 0; i < PLAZO_MESES; i++) {
     const p = state.pagos[i], r = rows[i];
-    if (r.cap <= 0) continue; // fila post-liquidación, no aporta quiebres
+    if (r.cap <= 0) continue; // fila post-liquidación
     if (p.pagada) {
-      // Cuota pagada: el saldo baja a r.saldoCalc (ya incluye capital + abono
-      // de esta misma cuota, si lo hubo). OJO: si pagaste ANTES de la fecha
-      // programada, el "reloj" de interés no arranca antes de esa fecha — el
-      // banco cobra el período completo sin importar si pagas antes o después
-      // (misma regla que ya usa renderTicker() para el saldo de hoy). Solo un
-      // pago TARDÍO adelanta la fecha efectiva, porque ahí sí siguió corriendo
-      // interés sobre el saldo viejo hasta el día real de pago.
       const fechaReal = p.fecha ? parseDate(p.fecha) : r.fechaProg;
       const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
-      saldoReal = r.saldoCalc;
-      events.push({ date: fechaEfectiva, saldo: saldoReal, label: `Cuota ${i+1} pagada` });
-    } else if ((r.abono || 0) > 0 && p.abonoFecha) {
-      // Abono registrado sin marcar la cuota como pagada: el saldo baja solo
-      // por el abono (el capital de la cuota aún no se ha amortizado).
-      saldoReal = Math.max(0, saldoReal - r.abono);
-      events.push({ date: parseDate(p.abonoFecha), saldo: saldoReal, label: `Abono cuota ${i+1}` });
+      eventos.push({ tipo: 'pago', fecha: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
+    } else if ((r.abono || 0) > 0 && !hayPagadaPosterior(i)) {
+      // (si una cuota posterior ya está pagada, su saldoCalc ya incluye este abono)
+      if (p.abonoFecha) eventos.push({ tipo: 'abono', fecha: parseDate(p.abonoFecha), monto: r.abono, label: `Abono cuota ${i+1}` });
+      else sinFecha.push({ monto: r.abono, label: `Abono cuota ${i+1} (sin fecha)` });
     }
   }
+  eventos.sort((a, b) => toUTC(a.fecha) - toUTC(b.fecha));
 
-  // Orden cronológico (por si un abono se registró fuera de orden de cuotas)
-  events.sort((a, b) => toUTC(a.date) - toUTC(b.date));
-  return events;
-}
+  let saldo = PRESTAMO_INICIAL, base = FECHA_INICIO, credito = 0; // credito: abono parcial a intereses
+  let baseLabel = 'Desembolso inicial', abonoSinFecha = false;
 
-// Devuelve el saldo/intereses/deuda EXACTOS para cualquier fecha consultada,
-// usando el quiebre de saldo vigente en ese momento (no el saldo de hoy).
-function saldoEnFecha(consultaDate) {
-  const timeline = buildSaldoTimeline();
-  let base = timeline[0];
-  for (const ev of timeline) {
-    if (toUTC(ev.date) <= toUTC(consultaDate)) base = ev;
-    else break;
-  }
-  const dias = Math.max(0, daysBetween30_360(base.date, consultaDate));
-  const intAcum = Math.round(calcIntSimple(base.saldo, dias));
-  return {
-    saldo: base.saldo,
-    dias,
-    intAcum,
-    deuda: base.saldo + intAcum,
-    baseDate: base.date,
-    baseLabel: base.label
+  const aplicarAbono = (monto, fecha, label) => {
+    const causado = Math.max(0, bruto(saldo, base, fecha) - credito);
+    if (monto >= causado) {
+      saldo = Math.max(0, saldo - (monto - causado));
+      base = fecha; credito = 0; baseLabel = label;
+    } else {
+      credito += monto; // el abono ni cubre los intereses causados: solo los reduce
+    }
   };
+
+  for (const ev of eventos) {
+    if (toUTC(ev.fecha) > X) break;
+    if (ev.tipo === 'pago') { saldo = ev.saldo; base = ev.fecha; credito = 0; baseLabel = ev.label; }
+    else aplicarAbono(ev.monto, ev.fecha, ev.label);
+  }
+  if (X >= hoy) {
+    for (const ab of sinFecha) { aplicarAbono(ab.monto, consultaDate, ab.label); abonoSinFecha = true; }
+  }
+
+  const dias    = Math.max(0, daysBetween30_360(base, consultaDate));
+  const intAcum = Math.max(0, calcIntSimple(saldo, dias) - credito);
+  return { saldo, dias, intAcum, deuda: saldo + intAcum, baseDate: base, baseLabel, abonoSinFecha };
 }
 
 // ── CUÁNTO DEBO — cualquier fecha (hoy, pasada o futura) ──────────────────────
@@ -3072,7 +3083,7 @@ function calcDeudaFecha() {
   }
 
   const consulta = parseDate(fi.value);
-  const { saldo, dias, intAcum, deuda, baseDate, baseLabel } = saldoEnFecha(consulta);
+  const { saldo, dias, intAcum, deuda, baseDate, baseLabel, abonoSinFecha } = saldoEnFecha(consulta);
 
   document.getElementById('dr-cap').textContent   = fmt(saldo);
   document.getElementById('dr-int').textContent   = fmt(intAcum);
@@ -3082,7 +3093,7 @@ function calcDeudaFecha() {
   const baseEl = document.getElementById('dr-base');
   if (baseEl) {
     const y = baseDate.getUTCFullYear(), m = String(baseDate.getUTCMonth()+1).padStart(2,'0'), d = String(baseDate.getUTCDate()).padStart(2,'0');
-    baseEl.textContent = `${baseLabel} · ${d}/${m}/${y}`;
+    baseEl.textContent = `${baseLabel} · ${d}/${m}/${y}` + (abonoSinFecha ? ' · abono sin fecha: se asume hecho en esta fecha' : '');
   }
 }
 
@@ -3189,7 +3200,6 @@ function setFecha(i, v) {
   state.pagos[i].fecha = v; saveState(); render();
   return true;
 }
-function setValor(i, v)  { state.pagos[i].valor = v; saveState(); render(); }
 function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); return true; }
 function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); return true; }
 // Máximo que se puede abonar a la cuota idx: el capital de la propia cuota se
@@ -3376,6 +3386,9 @@ function importBackup(event) {
       }
       // Verify checksum if present
       if (parsed.checksum) {
+        if (!(window.crypto && crypto.subtle)) {
+          showBackupToast('No se puede verificar el checksum en este contexto (abre la página por https). Importación cancelada.', 'error'); return;
+        }
         // Reconstruct payload in the EXACT same key order as exportBackup() uses,
         // to guarantee JSON.stringify produces the same string on all JS engines.
         const payloadToVerify = {
@@ -3413,7 +3426,6 @@ function importBackup(event) {
 }
 
 // ── GLOBAL TOAST ──────────────────────────────────────────────────────────────
-let _toastTimer = null;
 function showToast(msg, type = 'success', duration = 3500) {
   const el = document.getElementById('globalToast');
   const icon = document.getElementById('gtIcon');
@@ -3505,7 +3517,7 @@ function exportCSV() {
     lines.push([
       i+1, FECHAS_LABEL[i], p.pagada?'Pagada':'Pendiente',
       r.cap, r.intReal, r.dias,
-      r.ahorroAbono, r.cuota, r.gmf, r.totalReal, r.saldoCalc,
+      r.ahorroAbono, r.cuota, r.gmfEfectivo, r.totalReal, r.saldoCalc,
       p.fecha, p.nota || ''
     ].map(csvCell).join(','));
   });
@@ -3519,6 +3531,7 @@ function exportCSV() {
 // ── ABONO EDIT MODAL (desde tabla) ───────────────────────────────────────────
 let abonoEditIdx = -1;
 function openAbonoModal(i) {
+  if (readOnly) { showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return; }
   abonoEditIdx = i;
   document.getElementById('abonoEditTitle').textContent = `Abono — Cuota ${i+1}`;
   document.getElementById('abonoEditSub').textContent = FECHAS_LABEL[i];
@@ -3701,7 +3714,7 @@ async function exportImage() {
   const HIDE_SELECTORS = [
     '.export-bar', '.backup-section', '#abonoEditModal',
     '.tab-panel:not(.active)', '.filter-btns',
-    '.abono-modal-overlay', '#alertBox:not(.visible)'
+    '.abono-modal-overlay'
   ];
   const hidden = [];
   HIDE_SELECTORS.forEach(sel => {
@@ -3802,7 +3815,7 @@ function initCuotaTexts() {
   // Panel regla box
   const regla = document.getElementById('abonoReglaText');
   if (regla) regla.innerHTML =
-    `<span style="color:var(--text2)">Regla cooperativa:</span> cuota fija ${cuotaBFmt} + 50% (${cincoFmt}) = mín. <strong style="color:var(--amber)">${abonoFmt}</strong>`;
+    `<span style="color:var(--text2)">Regla cooperativa:</span> cuota fija ${cuotaBFmt} + 50% (${cincoFmt}) = mín. <strong style="color:var(--amber)">${abonoFmt}</strong><br><span style="color:var(--amber)">Pide "disminución de plazo"</span> al abonar (por defecto se aplica a disminución de cuota) y págalo directo al crédito, no a la cuenta de ahorros.`;
 
   // Modal hint
   const modalHint = document.getElementById('abonoModalMinHintText');
@@ -3939,10 +3952,9 @@ function _setReadOnly(value) {
   document.body.classList.toggle('readonly-mode', readOnly);
   const btn   = document.getElementById('btnReadOnly');
   const icon  = document.getElementById('roIcon');
-  document.querySelectorAll('tbody input, tbody select, tbody textarea').forEach(el => {
-    if (readOnly) { el.setAttribute('tabindex', '-1'); el.setAttribute('disabled', ''); }
-    else { el.removeAttribute('tabindex'); el.removeAttribute('disabled'); }
-  });
+  // Re-render: recrea las filas con el estado correcto (las casillas de cuotas
+  // eliminadas por liquidación deben seguir deshabilitadas al desbloquear).
+  render();
   if (readOnly) {
     _showOnlyDebeHoyTab();
     btn.classList.add('active-lock');
