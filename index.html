@@ -1593,9 +1593,21 @@ function initFirebaseSync() {
     _dbg('Firebase no configurado todavía (firebaseConfig con placeholders). Trabajando solo en localStorage.');
     return;
   }
-  fbApp = firebase.initializeApp(firebaseConfig);
-  fbAuth = firebase.auth();
-  fbDb = firebase.firestore();
+  if (typeof firebase === 'undefined') {
+    _dbg('Firebase no cargó (CDN bloqueado u offline). Trabajando solo en localStorage.');
+    showToast('No se pudo cargar la sincronización: trabajando solo en este dispositivo.', 'warn', 6000);
+    return;
+  }
+  try {
+    fbApp = firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+  } catch (e) {
+    _dbg('Error iniciando Firebase:', e);
+    fbDb = null;
+    showToast('No se pudo iniciar la sincronización: trabajando solo en este dispositivo.', 'warn', 6000);
+    return;
+  }
 
   fbAuth.signInAnonymously().catch(e => {
     _dbg('Error signInAnonymously:', e);
@@ -1951,7 +1963,7 @@ function calcRows() {
   for (let i = 0; i < PLAZO_MESES; i++) {
     const banco = AMORT_BANCO[i];  // referencia del banco, solo para comparación
     const p     = state.pagos[i];
-    const abono = p.abono || 0;
+    const abonoPedido = p.abono || 0;   // lo registrado por el usuario
 
     // ── Capital e interés de ESTA cuota, calculados con el saldo REAL ────────
     // El saldo (variable `saldo` de este loop) ya refleja cualquier abono
@@ -1993,6 +2005,9 @@ function calcRows() {
       b = { ...b, cap: liquidation.capReal, cuota: cuotaAjustada, gmf: Math.round(cuotaAjustada * GMF_RATE) };
     }
 
+    // Abono efectivo: si se registraron abonos que juntos pasan del saldo (p. ej. uno grande
+    // y luego otro en una cuota anterior), solo cuenta lo que realmente quedaba por pagar.
+    const abono       = Math.min(abonoPedido, Math.max(0, saldo - b.cap));
     const gmfCobrado  = p.gmfCobrado !== false; // default true
     const gmfEfectivo = gmfCobrado ? b.gmf : 0;
     const totalReal   = b.cuota + gmfEfectivo + abono;
@@ -2382,10 +2397,10 @@ function renderTicker(rows) {
       } else {
         lastPaidDate = fechaProgCuota;
       }
-    } else if ((p.abono || 0) > 0 && !r.esPostLiquidacion) {
+    } else if ((r.abono || 0) > 0 && !r.esPostLiquidacion) {
       // Abono registrado sin cuota pagada: baja SOLO el abono (el capital de la cuota
       // aún no se ha amortizado), sobre el saldo real acumulado hasta ahora.
-      saldo = Math.max(0, saldo - p.abono);
+      saldo = Math.max(0, saldo - r.abono);
     }
   }
 
@@ -2477,7 +2492,7 @@ function calcResumen(rows) {
   for (let i = 0; i < rows.length; i++) {
     const p = state.pagos[i], r = rows[i];
     if (!p || r.cap <= 0) continue;
-    const abono = p.abono || 0;
+    const abono = r.abono || 0;
     if (p.pagada) {
       totPagado += r.totalReal;            // ya incluye el abono de esta cuota
       totCap += r.cap;
@@ -2549,6 +2564,7 @@ function renderMetrics(rows) {
 let chartPerCuota = [];
 
 function renderChart(rows) {
+  if (typeof Chart === 'undefined') return; // CDN caído: se omite solo la gráfica
   const labels=[], capD=[], intD=[], ahorroD=[], saldoD=[];
   let acumCap=0, acumInt=0, acumAhorro=0;
   chartPerCuota = [];
@@ -2582,7 +2598,9 @@ function renderChart(rows) {
       abono:   Math.round(cuotaAbono),
       saldo:   rows[i].saldoCalc,
       pagada:  !!(p && p.pagada),
-      esPostLiquidacion: rows[i].esPostLiquidacion
+      esPostLiquidacion: rows[i].esPostLiquidacion,
+      capRow:  Math.round(r.cap),
+      intRow:  Math.round(r.int)
     });
   }
 
@@ -2646,11 +2664,11 @@ function renderChart(rows) {
                 case 0: // Capital
                   return d.esPostLiquidacion
                     ? `  Capital cuota: —`
-                    : `  Capital cuota: ${fmtTooltip(AMORT_CALC[idx].cap)}${d.abono > 0 ? ' + abono '+fmtTooltip(d.abono) : ''}`;
+                    : `  Capital cuota: ${fmtTooltip(d.capRow)}${d.abono > 0 ? ' + abono '+fmtTooltip(d.abono) : ''}`;
                 case 1: // Interés
                   return d.esPostLiquidacion
                     ? `  Interés cuota: —`
-                    : `  Interés cuota: ${fmtTooltip(AMORT_CALC[idx].int)}`;
+                    : `  Interés cuota: ${fmtTooltip(d.intRow)}`;
                 case 2: // Ahorro acumulado
                   return `  Ahorro acum.: ${fmtTooltip(item.raw)}`;
                 case 3: // Saldo restante
@@ -2676,13 +2694,15 @@ function renderChart(rows) {
 // ── TABLE ─────────────────────────────────────────────────────────────────────
 function renderTable(rows) {
   const sel    = document.getElementById('abonoCuota');
-  sel.innerHTML = '<option value="">Selecciona cuota...</option>';
+  const selPrev = sel.value;   // render() se dispara tras cada guardado/sync: conservar lo elegido
+  let optsHtml = '<option value="">Selecciona cuota...</option>';
   for (let i=0; i<PLAZO_MESES; i++) {
     if (rows[i].cap > 0) {
-      const opt = `<option value="${i}">Cuota ${i+1} — ${FECHAS_LABEL[i]}</option>`;
-      sel.innerHTML += opt;
+      optsHtml += `<option value="${i}">Cuota ${i+1} — ${FECHAS_LABEL[i]}</option>`;
     }
   }
+  sel.innerHTML = optsHtml;
+  if (selPrev !== '' && [...sel.options].some(o => o.value === selPrev)) sel.value = selPrev;
 
   const today = todayUTC();
   const tbody = document.getElementById('tbody');
@@ -2977,6 +2997,7 @@ function render() {
   renderTable(rows);
   renderVerificacion();
   calcDeudaFecha();
+  if (document.body.classList.contains('view-summary')) renderSummaryView();
 }
 
 // ── SIMULADOR FECHA ───────────────────────────────────────────────────────────
@@ -3006,10 +3027,10 @@ function buildSaldoTimeline() {
       const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
       saldoReal = r.saldoCalc;
       events.push({ date: fechaEfectiva, saldo: saldoReal, label: `Cuota ${i+1} pagada` });
-    } else if ((p.abono || 0) > 0 && p.abonoFecha) {
+    } else if ((r.abono || 0) > 0 && p.abonoFecha) {
       // Abono registrado sin marcar la cuota como pagada: el saldo baja solo
       // por el abono (el capital de la cuota aún no se ha amortizado).
-      saldoReal = Math.max(0, saldoReal - p.abono);
+      saldoReal = Math.max(0, saldoReal - r.abono);
       events.push({ date: parseDate(p.abonoFecha), saldo: saldoReal, label: `Abono cuota ${i+1}` });
     }
   }
@@ -3094,7 +3115,7 @@ function previewAbono() {
   }
   if (cuota !== '' && valor > 0) {
     const previewRows = calcRows();
-    const saldoMax = abonoMaximo(parseInt(cuota), previewRows);
+    const saldoMax = abonoDisponible(parseInt(cuota), previewRows);
     if (valor > saldoMax) {
       maxAlert.style.display = 'block';
       maxAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Máximo permitido: $${saldoMax.toLocaleString('es-CO')} (saldo tras la cuota)`;
@@ -3127,7 +3148,7 @@ function previewAbono() {
     <div class="calc-row"><span class="ck">Abono al capital</span><span class="cv val-green">${fmt(valor)}</span></div>
     <div class="calc-row"><span class="ck">Interés que ahorras/mes</span><span class="cv val-green">≈ ${fmt(intAhorrado)}</span></div>
     <div class="calc-row"><span class="ck">Cuotas que acorta aprox.</span><span class="cv val-green">≈ ${mesesAhorro} mes${mesesAhorro!==1?'es':''}</span></div>
-    <div class="calc-row"><span class="ck">Nuevo saldo (tras cuota y abono)</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - r.cap - valor))}</span></div>`;
+    <div class="calc-row"><span class="ck">Nuevo saldo (tras cuota y abono)</span><span class="cv">${fmt(Math.max(0, r.saldoAntes - r.cap - (state.pagos[idx].abono || 0) - valor))}</span></div>`;
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
@@ -3177,6 +3198,11 @@ function abonoMaximo(idx, rows) {
   const r = (rows || calcRows())[idx];
   return Math.max(0, Math.round(r.saldoAntes - r.cap));
 }
+// Lo que todavía se puede abonar a la cuota idx, descontando abonos ya registrados en ella.
+function abonoDisponible(idx, rows) {
+  const ya = (state.pagos[idx] && state.pagos[idx].abono) || 0;
+  return Math.max(0, abonoMaximo(idx, rows) - ya);
+}
 // Valida que la fecha del abono esté entre el inicio del préstamo y hoy.
 // Pagos tardíos (posteriores a la fecha programada de la cuota) son válidos:
 // el usuario puede haber realizado el abono después del vencimiento.
@@ -3206,7 +3232,7 @@ function aplicarAbono() {
   }
   const idx = parseInt(cuota);
   const rows = calcRows();
-  const saldoDisponible = abonoMaximo(idx, rows);
+  const saldoDisponible = abonoDisponible(idx, rows);
   if (valor > saldoDisponible) {
     showToast(`El abono supera el saldo disponible ($${saldoDisponible.toLocaleString('es-CO')})`, 'error', 5000);
     return;
@@ -3221,7 +3247,7 @@ function _doAplicarAbono(cuota, valor, fechaAbonoStr) {
     fechaAbonoStr = document.getElementById('abonoFecha').value || '';
     const idx2 = parseInt(cuota);
     const rows2 = calcRows();
-    if (valor > abonoMaximo(idx2, rows2)) {
+    if (valor > abonoDisponible(idx2, rows2)) {
       showToast(`El abono supera el saldo disponible`, 'error', 5000); return false;
     }
     const errF = validarFechaAbono(fechaAbonoStr, idx2);
@@ -3314,6 +3340,11 @@ async function exportBackup() {
 
 // ── BACKUP — IMPORT ───────────────────────────────────────────────────────────
 function importBackup(event) {
+  if (readOnly) {
+    event.target.value = '';
+    showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000);
+    return;
+  }
   const file = event.target.files[0];
   event.target.value = ''; // allow re-selecting same file
   if (!file) return;
@@ -3863,6 +3894,7 @@ function renderLog() {
 }
 
 function clearLog() {
+  if (readOnly) { showToast('Modo solo lectura activo — desbloquea primero', 'warn', 3000); return; }
   auditLog = [];
   saveLog();
   renderLog();
@@ -4068,6 +4100,7 @@ function renderSummaryView() {
   const bannerSlot = document.getElementById('sv-banner-slot');
   const origBanner = document.getElementById('nextBanner');
   bannerSlot.innerHTML = origBanner ? origBanner.outerHTML : '';
+  bannerSlot.querySelectorAll('[id]').forEach(el => el.removeAttribute('id')); // el clon no debe duplicar ids
 
   // 4 key metrics
   const { totPagado, totIntReal, cuotasPag, saldoPend } = calcResumen(rows);
@@ -4082,7 +4115,7 @@ function renderSummaryView() {
   `;
 
   // Mini chart
-  const ctxMini = document.getElementById('myChartMini').getContext('2d');
+  const ctxMini = (typeof Chart !== 'undefined') ? document.getElementById('myChartMini').getContext('2d') : null;
   const labels = [], capD = [], intD = [], saldoD = [];
   let acumCap = 0, acumInt = 0;
   for (let i = 0; i < PLAZO_MESES; i++) {
@@ -4095,7 +4128,8 @@ function renderSummaryView() {
     saldoD.push(rows[i].saldoCalc);
   }
   if (miniChart) miniChart.destroy();
-  miniChart = new Chart(ctxMini, {
+  miniChart = null;
+  if (ctxMini) miniChart = new Chart(ctxMini, {
     type: 'line',
     data: {
       labels,
