@@ -728,6 +728,29 @@ body.view-summary .full-view { display: none; }
 }
 .sv-expand-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
 
+/* ── EXPORT IMAGE MODAL ──────────────────────────────────────────────── */
+.xp-overlay{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,0.7);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:12px;}
+.xp-overlay.open{display:flex;}
+.xp-box{background:var(--bg3);border:1px solid var(--border3);border-radius:var(--radius-xl);width:480px;max-width:100%;max-height:92vh;overflow-y:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,0.6);}
+.xp-title{font-size:16px;font-weight:700;}
+.xp-sub{font-size:11.5px;color:var(--text3);margin:4px 0 14px;line-height:1.55;}
+.xp-opt{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius-lg);background:var(--bg4);cursor:pointer;margin-bottom:7px;transition:border-color 0.15s,background 0.15s;}
+.xp-opt:hover:not(.disabled){border-color:var(--border3);}
+.xp-opt.checked{border-color:rgba(91,141,239,0.5);background:var(--blue-dim);}
+.xp-opt.disabled{opacity:0.4;cursor:not-allowed;}
+.xp-opt input{margin-top:2px;flex-shrink:0;}
+.xp-opt-t{font-size:13px;font-weight:600;}
+.xp-opt-d{font-size:11px;color:var(--text2);margin-top:2px;line-height:1.45;}
+.xp-opt-n{font-size:10.5px;font-family:var(--mono);color:var(--blue);white-space:nowrap;padding-top:2px;text-align:right;}
+.xp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 10px;}
+.xp-hint{font-size:10.5px;color:var(--text3);line-height:1.55;margin-bottom:14px;}
+.xp-btns{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;}
+.xp-btns .btn:disabled{opacity:0.5;cursor:not-allowed;}
+/* El modo solo lectura no debe inutilizar este diálogo (exportar no modifica datos) */
+body.readonly-mode .xp-overlay input,body.readonly-mode .xp-overlay select,body.readonly-mode .xp-overlay .btn{pointer-events:auto!important;opacity:1!important;cursor:pointer!important;}
+body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!important;opacity:0.4!important;}
+@media(max-width:600px){.xp-opt{flex-wrap:wrap;}.xp-opt-n{margin-left:26px;text-align:left;}}
+
 /* ── MOBILE HEADER FIXES ─────────────────────────────────────────────── */
 @media(max-width:600px) {
   .site-header { flex-direction: column; gap: 10px; }
@@ -3806,80 +3829,486 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ── EXPORT IMAGE (html2canvas) ────────────────────────────────────────────────
-// Usa html2canvas para capturar el DOM tal como se ve en pantalla.
-// Ventaja: cualquier cambio de layout se refleja automáticamente en la imagen,
-// sin necesidad de recalcular coordenadas manuales.
-async function exportImage() {
-  if (typeof html2canvas === 'undefined') {
-    showBackupToast('Error: html2canvas no disponible', 'error');
-    return;
-  }
+// ── EXPORT IMAGE ──────────────────────────────────────────────────────────────
+// En vez de "fotografiar" toda la página (que queda enorme y pierde calidad),
+// se arman láminas de ancho fijo (XP_W) fuera de pantalla y se renderizan una a
+// una con html2canvas. Cada lámina tiene un tamaño acotado, así la nitidez es la
+// misma sin importar cuántas cuotas tenga el préstamo ni el tamaño de la pantalla.
+// Las tablas largas se reparten en varias imágenes (XP_ROWS filas como máximo).
+const XP_W          = 960;        // ancho fijo del lienzo (px CSS)
+const XP_ROWS       = 12;         // filas máximas por imagen en las tablas
+const XP_MAX_PIXELS = 16000000;   // tope de píxeles por imagen (seguro en móviles/Safari)
+const XP_PREF_SK    = SK + '_export';
+const XP_MONO       = "font-family:'JetBrains Mono',monospace";
 
-  // Show loading state on button
-  const exportBtn = document.getElementById('btnExportImage');
-  const origBtnHTML = exportBtn ? exportBtn.innerHTML : '';
-  if (exportBtn) {
-    exportBtn.disabled = true;
-    exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Generando...';
-  }
-  showToast('Generando imagen, espera un momento...', 'info', 30000); // long-lived; overwritten on finish
+const XP_THEMES = {
+  dark:  { bg:'#090b10', card:'#141720', card2:'#20242f', head:'#0e1118', border:'rgba(255,255,255,0.10)', grid:'#262b3a', stripe:'rgba(255,255,255,0.025)',
+           text:'#dde2f0', text2:'#9aa2c0', text3:'#6a7392', blue:'#5b8def', green:'#2dd4a0', red:'#f0647a', amber:'#f5a623', purple:'#9b87f5' },
+  light: { bg:'#ffffff', card:'#f4f6fb', card2:'#e3e8f4', head:'#e8ecf6', border:'rgba(20,30,60,0.14)', grid:'#d5dbea', stripe:'rgba(20,30,60,0.035)',
+           text:'#12172a', text2:'#4a5473', text3:'#7a84a3', blue:'#2f64d6', green:'#0f9d73', red:'#d6334f', amber:'#b87408', purple:'#6a55d8' }
+};
 
-  // Elementos que NO queremos capturar (controles interactivos)
-  const HIDE_SELECTORS = [
-    '.export-bar', '.backup-section', '#abonoEditModal',
-    '.tab-panel:not(.active)', '.filter-btns',
-    '.abono-modal-overlay'
-  ];
-  const hidden = [];
-  HIDE_SELECTORS.forEach(sel => {
-    document.querySelectorAll(sel).forEach(el => {
-      if (el.style.display !== 'none') {
-        el.dataset.h2cHidden = '1';
-        el.style.display = 'none';
-        hidden.push(el);
+const XP_OPTIONS = [
+  { id:'resumen',    title:'Resumen general',   desc:'Métricas, progreso, gráfica y próximas cuotas' },
+  { id:'hoy',        title:'Deuda de hoy',      desc:'Saldo, interés causado y total a pagar a la fecha de consulta' },
+  { id:'pendientes', title:'Cuotas que faltan', desc:'Detalle de las cuotas pendientes y cuánto falta por pagar' },
+  { id:'pagadas',    title:'Cuotas pagadas',    desc:'Lo ya pagado: capital, interés, abonos y GMF' },
+  { id:'abonos',     title:'Abonos a capital',  desc:'Cada abono, su fecha y el ahorro estimado en intereses' },
+  { id:'completa',   title:'Tabla completa',    desc:`Las ${PLAZO_MESES} cuotas con su estado` }
+];
+
+// ── Utilidades ────────────────────────────────────────────────────────────────
+function xpIso(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${+d} ${MESES_ES[+m - 1]} ${y}`;
+}
+function xpDate(d) { return `${d.getUTCDate()} ${MESES_ES[d.getUTCMonth()]} ${d.getUTCFullYear()}`; }
+function xpPlural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+// Reparte las filas en páginas parejas (13 filas → 7+6, no 12+1).
+function xpChunks(arr) {
+  if (!arr.length) return [[]];
+  const pages = Math.ceil(arr.length / XP_ROWS), per = Math.ceil(arr.length / pages);
+  const out = [];
+  for (let i = 0; i < arr.length; i += per) out.push(arr.slice(i, i + per));
+  return out;
+}
+function xpData() {
+  const rows = calcRows(), today = todayUTC();
+  const fc = document.getElementById('fechaConsulta');
+  const consulta = (fc && fc.value && fc.dataset.manual === '1') ? parseDate(fc.value) : today;
+  const idx = rows.map((_, i) => i);
+  return {
+    rows, today, consulta,
+    pagadas:    idx.filter(i => state.pagos[i].pagada && rows[i].cap > 0),
+    pendientes: idx.filter(i => !state.pagos[i].pagada && !rows[i].esPostLiquidacion),
+    abonos:     idx.filter(i => rows[i].abono > 0 && rows[i].cap > 0),
+    res:        calcResumen(rows),
+    est:        saldoEnFecha(consulta, rows),
+    estHoy:     saldoEnFecha(today, rows)
+  };
+}
+
+// ── Piezas de diseño (todo con estilos inline y colores literales) ────────────
+function xpStat(P, label, value, color, sub) {
+  return `<div style="background:${P.card};border:1px solid ${P.border};border-radius:12px;padding:14px 16px">
+    <div style="font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:${P.text3};font-weight:600;margin-bottom:6px">${label}</div>
+    <div style="font-size:22px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${value}</div>
+    ${sub ? `<div style="font-size:12px;color:${P.text2};margin-top:5px">${sub}</div>` : ''}
+  </div>`;
+}
+function xpGrid(cols, inner) {
+  return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;margin-bottom:16px">${inner}</div>`;
+}
+function xpCard(P, title, inner) {
+  return `<div style="background:${P.card};border:1px solid ${P.border};border-radius:12px;padding:16px 18px;margin-bottom:16px">
+    <div style="font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:${P.text3};font-weight:600;margin-bottom:12px">${title}</div>${inner}</div>`;
+}
+function xpTable(P, cols, data) {
+  const wsum = cols.reduce((t, c) => t + (c.w || 100), 0);
+  const colgroup = cols.map(c => `<col style="width:${((c.w || 100) / wsum * 100).toFixed(2)}%">`).join('');
+  const th = cols.map(c => `<th style="text-align:${c.a || 'right'};padding:10px 8px;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;background:${P.head};white-space:nowrap">${c.h}</th>`).join('');
+  const trs = data.map((r, ri) => `<tr style="background:${ri % 2 ? P.stripe : 'transparent'}">${r.map((cell, ci) => {
+    const o = (cell && typeof cell === 'object') ? cell : { t: cell };
+    const col = cols[ci];
+    return `<td style="text-align:${col.a || 'right'};padding:9px 8px;font-size:12px;border-top:1px solid ${P.border};white-space:nowrap;color:${o.c || P.text};font-weight:${o.b ? 700 : 500};${col.m === false ? '' : XP_MONO}">${o.t}</td>`;
+  }).join('')}</tr>`).join('');
+  return `<div style="border:1px solid ${P.border};border-radius:12px;overflow:hidden;background:${P.card}"><table style="width:100%;min-width:0;table-layout:fixed;border-collapse:collapse"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+function xpFrame(P, kicker, body, page, pages) {
+  const gen = new Date().toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+  return `<div style="width:${XP_W}px;box-sizing:border-box;padding:36px 40px 26px;background:${P.bg};color:${P.text};font-family:'Space Grotesk',sans-serif;font-size:14px;line-height:1.45">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid ${P.border}">
+      <div>
+        <div style="font-size:26px;font-weight:700;letter-spacing:-0.5px">Préstamo <span style="color:${P.blue}">·</span> Cooperativa JFK</div>
+        <div style="font-size:12.5px;color:${P.text2};margin-top:5px">${fmt(PRESTAMO_INICIAL)} COP · 1,75% mensual · ${PLAZO_MESES} meses · 21% NAMV · inicio ${FECHA_INICIO_LABEL}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${P.blue};font-weight:700">${kicker}</div>
+        <div style="font-size:12px;color:${P.text2};margin-top:3px">${gen}</div>
+      </div>
+    </div>
+    ${body}
+    <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:12px;border-top:1px solid ${P.border};font-size:11px;color:${P.text3}">
+      <span>Tracker Préstamo · Cooperativa JFK · cifras informativas calculadas por la app</span>
+      <span>${pages > 1 ? `Imagen ${page} de ${pages}` : ''}</span>
+    </div>
+  </div>`;
+}
+function xpNext3(P, c) {
+  const list = c.pendientes.slice(0, 3);
+  if (!list.length) return `<div style="color:${P.green};font-size:14px;font-weight:600;padding:4px 0">¡Todas las cuotas están pagadas!</div>`;
+  return list.map((i, k) => {
+    const r = c.rows[i], d = daysBetween(c.today, r.fechaProg);
+    const [txt, col] = d < 0 ? [`vencida hace ${xpPlural(-d, 'día', 'días')}`, P.red]
+                    : d === 0 ? ['vence hoy', P.blue]
+                    : [`en ${xpPlural(d, 'día', 'días')}`, d <= 5 ? P.amber : P.blue];
+    return `<div style="display:flex;align-items:center;gap:14px;padding:10px 0;${k ? `border-top:1px solid ${P.border};` : ''}">
+      <span style="${XP_MONO};font-weight:700;color:${P.blue};width:46px">#${i + 1}</span>
+      <span style="flex:1;color:${P.text2}">${FECHAS_LABEL[i]}</span>
+      <span style="font-size:12px;font-weight:600;color:${col}">${txt}</span>
+      <span style="${XP_MONO};font-weight:700;color:${P.amber};width:140px;text-align:right">${fmt(r.totalReal - (r.abono || 0))}</span>
+    </div>`;
+  }).join('');
+}
+// Gráfica como SVG (vectorial → nítida a cualquier escala), incrustada como <img>.
+function xpChartHtml(P, rows) {
+  const W = 880, H = 240, L = 58, R = 14, T = 12, B = 28, n = PLAZO_MESES;
+  const cap = [], int = [], saldo = [];
+  let aC = 0, aI = 0;
+  for (let i = 0; i < n; i++) {
+    const p = state.pagos[i], r = rows[i];
+    if (p.pagada && r.cap > 0) { aC += r.cap; aI += r.int; }
+    if ((p.abono || 0) > 0 && r.cap > 0) aC += r.abono;
+    cap.push(aC); int.push(aI); saldo.push(r.saldoCalc);
+  }
+  const x = i => L + (W - L - R) * i / (n - 1);
+  const y = v => T + (H - T - B) * (1 - v / PRESTAMO_INICIAL);
+  const line = a => a.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = a => `${line(a)} L${x(n - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`;
+  let g = '';
+  [0, 5e6, 10e6, 15e6, 20e6].forEach(v => {
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${P.grid}" stroke-width="1"/>` +
+         `<text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="${P.text3}" font-family="Arial,sans-serif">$${v / 1e6}M</text>`;
+  });
+  [0, 5, 11, 17, 23, 29, 35].forEach(i => {
+    if (i < n) g += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${P.text3}" font-family="Arial,sans-serif">C${i + 1}</text>`;
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}` +
+    `<path d="${area(saldo)}" fill="${P.amber}" fill-opacity="0.10"/>` +
+    `<path d="${area(cap)}" fill="${P.blue}" fill-opacity="0.12"/>` +
+    `<path d="${line(saldo)}" fill="none" stroke="${P.amber}" stroke-width="2" stroke-dasharray="6 4"/>` +
+    `<path d="${line(int)}" fill="none" stroke="${P.red}" stroke-width="2.5" stroke-linejoin="round"/>` +
+    `<path d="${line(cap)}" fill="none" stroke="${P.blue}" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+  const dot = (col, t) => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:18px"><span style="width:10px;height:10px;border-radius:3px;background:${col};display:inline-block"></span>${t}</span>`;
+  return `<img alt="" width="${W}" height="${H}" style="display:block;width:100%;height:auto" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">` +
+    `<div style="font-size:12px;color:${P.text2};margin-top:10px">${dot(P.blue, 'Capital pagado')}${dot(P.red, 'Intereses pagados')}${dot(P.amber, 'Saldo restante (proyectado)')}</div>`;
+}
+
+// ── Constructores de cada imagen (devuelven [{kicker, body}, …]) ──────────────
+function xpResumenPages(P, c) {
+  const { res, rows, estHoy } = c;
+  const pct = Math.round((PRESTAMO_INICIAL - res.saldoPend) / PRESTAMO_INICIAL * 100);
+  const efect = rows.filter(r => !r.esPostLiquidacion).length;
+  const elim = PLAZO_MESES - efect;
+  const progress = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">
+      <span style="color:${P.text2};font-size:13px">Capital pagado ${fmt(PRESTAMO_INICIAL - res.saldoPend)} de ${fmt(PRESTAMO_INICIAL)}</span>
+      <span style="font-size:20px;font-weight:700;${XP_MONO};color:${P.green}">${pct}%</span></div>
+    <div style="height:12px;border-radius:6px;background:${P.card2};overflow:hidden"><div style="height:12px;width:${pct}%;border-radius:6px;background:linear-gradient(90deg,${P.blue},${P.green})"></div></div>`;
+  const body =
+    xpGrid(4,
+      xpStat(P, 'Saldo pendiente', fmt(res.saldoPend), P.amber, `${pct}% amortizado`) +
+      xpStat(P, 'Total pagado', fmt(res.totPagado), P.blue, 'capital + interés + GMF') +
+      xpStat(P, 'Capital amortizado', fmt(res.totCap), P.green, `de ${fmt(PRESTAMO_INICIAL)}`) +
+      xpStat(P, 'Intereses pagados', fmt(res.totIntReal), P.red, 'por días exactos')) +
+    xpGrid(4,
+      xpStat(P, 'Cuotas pagadas', String(res.cuotasPag), P.purple, `de ${efect} cuotas reales`) +
+      xpStat(P, 'Cuotas restantes', String(efect - res.cuotasPag), P.purple, elim > 0 ? `${xpPlural(elim, 'eliminada', 'eliminadas')} por abonos` : 'según el plan actual') +
+      xpStat(P, 'Abonado a capital', fmt(res.totAbonos), P.green, res.totAbonos > 0 ? 'reduce saldo e intereses' : 'sin abonos aún') +
+      xpStat(P, 'Deuda total hoy', fmt(estHoy.deuda), P.amber, `capital + ${fmt(estHoy.intAcum)} de interés`)) +
+    xpCard(P, 'Progreso del préstamo', progress) +
+    xpCard(P, 'Capital vs. intereses · saldo proyectado', xpChartHtml(P, rows)) +
+    xpCard(P, 'Próximas cuotas', xpNext3(P, c));
+  return [{ kicker: 'Resumen general', body }];
+}
+
+function xpHoyPages(P, c) {
+  const { est, estHoy, rows, today, consulta } = c;
+  const esHoy = toUTC(consulta) === toUTC(today);
+  const base = est.baseDate ? xpDate(est.baseDate) : '—';
+  const hero = `<div style="background:${P.card};border:1px solid ${P.border};border-radius:14px;padding:22px 24px;margin-bottom:16px;text-align:center">
+      <div style="font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:${P.text3};font-weight:600">Deuda total ${esHoy ? 'hoy' : 'al'} · ${xpDate(consulta)}</div>
+      <div style="font-size:48px;font-weight:700;${XP_MONO};color:${P.amber};margin:8px 0 4px;letter-spacing:-1px">${fmt(est.deuda)}</div>
+      <div style="font-size:13px;color:${P.text2}">capital + interés causado a esa fecha</div>
+    </div>`;
+  const tiles = xpGrid(3,
+    xpStat(P, 'Saldo capital', fmt(est.saldo), P.blue, est.baseLabel) +
+    xpStat(P, 'Interés acumulado', fmt(est.intAcum), P.red, `${xpPlural(est.dias, 'día', 'días')} desde ${base}`) +
+    xpStat(P, 'Interés por día', fmt(Math.round(est.saldo * TASA_DIARIA)), P.text, 'saldo × 21% ÷ 360'));
+  let prox = '';
+  if (c.pendientes.length) {
+    const i = c.pendientes[0], r = rows[i], d = daysBetween(today, r.fechaProg);
+    const estado = d < 0 ? [`vencida hace ${xpPlural(-d, 'día', 'días')}`, P.red] : d === 0 ? ['vence hoy', P.blue] : [`faltan ${xpPlural(d, 'día', 'días')}`, d <= 5 ? P.amber : P.blue];
+    prox = xpCard(P, 'Próxima cuota',
+      `<div style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+        <div><div style="font-size:18px;font-weight:700">Cuota ${i + 1} · ${FECHAS_LABEL[i]}</div>
+          <div style="font-size:13px;font-weight:600;color:${estado[1]};margin-top:3px">${estado[0]}</div></div>
+        <div style="display:flex;gap:28px;text-align:right">
+          <div><div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3}">Interés del período</div><div style="${XP_MONO};font-size:18px;font-weight:700;color:${P.red};margin-top:3px">${fmt(r.int)}</div></div>
+          <div><div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3}">Monto a pagar</div><div style="${XP_MONO};font-size:18px;font-weight:700;color:${P.amber};margin-top:3px">${fmt(r.totalReal - (r.abono || 0))}</div></div>
+        </div></div>`);
+  }
+  const nota = `<div style="font-size:11.5px;color:${P.text3};line-height:1.6">Interés diario = saldo × 21% ÷ 360 (convención 30/360). Cada abono paga primero los intereses causados a su fecha y el resto baja el capital (pagaré, cláusula Décimo Primera).${esHoy ? '' : ` Para referencia, la deuda de hoy es ${fmt(estHoy.deuda)}.`}</div>`;
+  return [{ kicker: 'Deuda de hoy', body: hero + tiles + prox + xpCard(P, 'Próximas cuotas', xpNext3(P, c)) + nota }];
+}
+
+function xpTablePages(P, kicker, indices, cols, rowFn, tilesHtml) {
+  return xpChunks(indices).map(chunk => ({ kicker, body: tilesHtml + xpTable(P, cols, chunk.map(rowFn)) }));
+}
+const XP_DASH = (P) => ({ t: '—', c: P.text3 });
+
+function xpPendientesPages(P, c) {
+  const { rows, res, today } = c;
+  const totPagar = c.pendientes.reduce((s, i) => s + rows[i].totalReal - (rows[i].abono || 0), 0);
+  const totInt   = c.pendientes.reduce((s, i) => s + rows[i].int, 0);
+  const ultima   = c.pendientes.length ? FECHAS_LABEL[c.pendientes[c.pendientes.length - 1]] : '—';
+  const tiles = xpGrid(4,
+    xpStat(P, 'Cuotas que faltan', String(c.pendientes.length), P.purple, `última: ${ultima}`) +
+    xpStat(P, 'Total por pagar', fmt(totPagar), P.amber, 'cuotas + GMF, plan actual') +
+    xpStat(P, 'Intereses por pagar', fmt(totInt), P.red, 'incluidos en ese total') +
+    xpStat(P, 'Saldo capital', fmt(res.saldoPend), P.blue, 'tras lo ya pagado'));
+  const cols = [{ h: '#', a: 'left', w: 50 }, { h: 'Fecha', a: 'left', m: false, w: 120 }, { h: 'Capital', w: 105 }, { h: 'Interés', w: 105 }, { h: 'Cuota base', w: 115 }, { h: 'GMF', w: 85 }, { h: 'A pagar', w: 110 }, { h: 'Saldo', w: 110 }];
+  const rowFn = i => {
+    const r = rows[i], vencida = daysBetween(today, r.fechaProg) < 0;
+    return [
+      { t: `#${i + 1}`, b: 1, c: P.blue },
+      { t: FECHAS_LABEL[i], c: vencida ? P.red : P.text },
+      fmt(r.cap), fmt(r.int), fmt(r.cuota),
+      r.gmfEfectivo > 0 ? fmt(r.gmfEfectivo) : XP_DASH(P),
+      { t: fmt(r.totalReal - (r.abono || 0)), b: 1, c: P.amber },
+      fmt(r.saldoCalc)
+    ];
+  };
+  const pages = xpTablePages(P, 'Cuotas que faltan', c.pendientes, cols, rowFn, tiles);
+  if (c.pendientes.some(i => daysBetween(today, rows[i].fechaProg) < 0)) {
+    pages.forEach(pg => { pg.body += `<div style="font-size:11.5px;color:${P.text3};margin-top:10px">Las fechas en <span style="color:${P.red};font-weight:600">rojo</span> corresponden a cuotas vencidas (con mora según el pagaré).</div>`; });
+  }
+  return pages;
+}
+
+function xpPagadasPages(P, c) {
+  const { rows, res } = c;
+  const tiles = xpGrid(4,
+    xpStat(P, 'Cuotas pagadas', String(c.pagadas.length), P.purple, `de ${rows.filter(r => !r.esPostLiquidacion).length} cuotas reales`) +
+    xpStat(P, 'Total pagado', fmt(res.totPagado), P.blue, 'capital + interés + GMF') +
+    xpStat(P, 'Capital amortizado', fmt(res.totCap), P.green, `de ${fmt(PRESTAMO_INICIAL)}`) +
+    xpStat(P, 'Intereses pagados', fmt(res.totIntReal), P.red, 'por días exactos'));
+  const cols = [{ h: '#', a: 'left', w: 50 }, { h: 'Fecha prog.', a: 'left', m: false, w: 105 }, { h: 'Fecha pago', a: 'left', m: false, w: 105 }, { h: 'Capital', w: 100 }, { h: 'Interés', w: 100 }, { h: 'Abono', w: 100 }, { h: 'GMF', w: 80 }, { h: 'Total pagado', w: 115 }, { h: 'Saldo', w: 105 }];
+  const rowFn = i => {
+    const r = rows[i], p = state.pagos[i];
+    const dd = p.fecha ? daysBetween(r.fechaProg, parseDate(p.fecha)) : 0;
+    return [
+      { t: `#${i + 1}`, b: 1, c: P.blue }, FECHAS_LABEL[i],
+      { t: p.fecha ? xpIso(p.fecha) : '—', c: dd < 0 ? P.green : dd > 0 ? P.red : P.text },
+      fmt(r.cap), fmt(r.int),
+      r.abono > 0 ? { t: '+' + fmt(r.abono), c: P.green } : XP_DASH(P),
+      r.gmfEfectivo > 0 ? fmt(r.gmfEfectivo) : XP_DASH(P),
+      { t: fmt(r.totalReal), b: 1, c: P.amber },
+      fmt(r.saldoCalc)
+    ];
+  };
+  return xpTablePages(P, 'Cuotas pagadas', c.pagadas, cols, rowFn, tiles);
+}
+
+function xpAbonosPages(P, c) {
+  const { rows, res } = c;
+  const ahorro = c.abonos.reduce((s, i) => s + (rows[i].ahorroAbono || 0), 0);
+  const efect = rows.filter(r => !r.esPostLiquidacion).length;
+  const tiles = xpGrid(4,
+    xpStat(P, 'Total abonado', fmt(res.totAbonos), P.green, xpPlural(c.abonos.length, 'abono', 'abonos')) +
+    xpStat(P, 'Ahorro estimado', fmt(ahorro), P.green, 'en intereses del plan') +
+    xpStat(P, 'Cuotas eliminadas', String(PLAZO_MESES - efect), P.purple, `de ${PLAZO_MESES} originales`) +
+    xpStat(P, 'Saldo pendiente', fmt(res.saldoPend), P.amber, 'tras abonos y cuotas'));
+  const cols = [{ h: 'Cuota', a: 'left', w: 70 }, { h: 'Fecha cuota', a: 'left', m: false, w: 130 }, { h: 'Fecha abono', a: 'left', m: false, w: 130 }, { h: 'Abono', w: 130 }, { h: 'Ahorro estimado', w: 150 }, { h: 'Saldo tras la cuota', w: 160 }];
+  const rowFn = i => {
+    const r = rows[i], p = state.pagos[i];
+    return [
+      { t: `#${i + 1}`, b: 1, c: P.blue }, FECHAS_LABEL[i],
+      p.abonoFecha ? xpIso(p.abonoFecha) : { t: 'sin fecha', c: P.text3 },
+      { t: fmt(r.abono), b: 1, c: P.green },
+      r.ahorroAbono > 0 ? { t: '≈ ' + fmt(r.ahorroAbono), c: P.green } : XP_DASH(P),
+      fmt(r.saldoCalc)
+    ];
+  };
+  return xpTablePages(P, 'Abonos a capital', c.abonos, cols, rowFn, tiles);
+}
+
+function xpCompletaPages(P, c) {
+  const { rows, res, today } = c;
+  const pct = Math.round((PRESTAMO_INICIAL - res.saldoPend) / PRESTAMO_INICIAL * 100);
+  const tiles = xpGrid(4,
+    xpStat(P, 'Pagadas', String(c.pagadas.length), P.green, `de ${rows.filter(r => !r.esPostLiquidacion).length} cuotas reales`) +
+    xpStat(P, 'Pendientes', String(c.pendientes.length), P.purple, 'según el plan actual') +
+    xpStat(P, 'Saldo pendiente', fmt(res.saldoPend), P.amber, `${pct}% amortizado`) +
+    xpStat(P, 'Deuda total hoy', fmt(c.estHoy.deuda), P.blue, 'capital + interés causado'));
+  const cols = [{ h: '#', a: 'left', w: 50 }, { h: 'Fecha', a: 'left', m: false, w: 105 }, { h: 'Estado', a: 'left', m: false, w: 95 }, { h: 'Capital', w: 100 }, { h: 'Interés', w: 100 }, { h: 'Abono', w: 100 }, { h: 'GMF', w: 80 }, { h: 'Total', w: 105 }, { h: 'Saldo', w: 105 }];
+  const rowFn = i => {
+    const r = rows[i], p = state.pagos[i];
+    if (r.esPostLiquidacion) return [{ t: `#${i + 1}`, c: P.text3 }, { t: FECHAS_LABEL[i], c: P.text3 }, { t: 'Eliminada', c: P.text3 }, XP_DASH(P), XP_DASH(P), XP_DASH(P), XP_DASH(P), XP_DASH(P), XP_DASH(P)];
+    const vencida = !p.pagada && daysBetween(today, r.fechaProg) < 0;
+    const estado = p.pagada ? { t: 'Pagada', c: P.green, b: 1 } : vencida ? { t: 'Vencida', c: P.red, b: 1 } : { t: 'Pendiente', c: P.text2 };
+    return [
+      { t: `#${i + 1}`, b: 1, c: P.blue }, FECHAS_LABEL[i], estado,
+      fmt(r.cap), fmt(r.int),
+      r.abono > 0 ? { t: '+' + fmt(r.abono), c: P.green } : XP_DASH(P),
+      r.gmfEfectivo > 0 ? fmt(r.gmfEfectivo) : XP_DASH(P),
+      { t: fmt(r.totalReal), b: 1, c: P.amber },
+      fmt(r.saldoCalc)
+    ];
+  };
+  return xpTablePages(P, 'Tabla de amortización', rows.map((_, i) => i), cols, rowFn, tiles);
+}
+
+const XP_BUILDERS = {
+  resumen: xpResumenPages, hoy: xpHoyPages, pendientes: xpPendientesPages,
+  pagadas: xpPagadasPages, abonos: xpAbonosPages, completa: xpCompletaPages
+};
+
+// ── Render a PNG ──────────────────────────────────────────────────────────────
+async function xpRender(html, scaleWanted, bg) {
+  const host = document.createElement('div');
+  host.id = '__xpHost';
+  host.style.cssText = `position:fixed;left:-${XP_W + 400}px;top:0;width:${XP_W}px;pointer-events:none;`;
+  host.innerHTML = html;
+  document.body.appendChild(host);
+  try {
+    const el = host.firstElementChild;
+    try { if (document.fonts) { await document.fonts.ready; } } catch (_) {}
+    await Promise.all([...el.querySelectorAll('img')].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+    const h = Math.ceil(el.getBoundingClientRect().height);
+    // Escala pedida, recortada si la imagen superaría el tope de píxeles del navegador.
+    const scale = Math.max(1, Math.min(scaleWanted, Math.sqrt(XP_MAX_PIXELS / (XP_W * h))));
+    return await html2canvas(el, {
+      backgroundColor: bg || '#ffffff', scale, useCORS: true, logging: false,
+      width: XP_W, height: h, windowWidth: XP_W, windowHeight: h, scrollX: 0, scrollY: 0,
+      onclone: doc => {   // en el clon la lámina se coloca en (0,0) para que no salga cortada
+        const hh = doc.getElementById('__xpHost');
+        if (hh) { hh.style.position = 'absolute'; hh.style.left = '0'; hh.style.top = '0'; }
       }
     });
-  });
+  } finally {
+    document.body.removeChild(host);
+  }
+}
+function xpDownload(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
 
+// ── Modal de opciones ─────────────────────────────────────────────────────────
+let xpEl = null, xpBusy = false;
+function xpLoadPrefs() {
   try {
-    const target = document.querySelector('.page');
-    const canvas = await html2canvas(target, {
-      backgroundColor: '#090b10',
-      scale: 2,          // resolución 2×
-      useCORS: true,
-      logging: false,
-      width: target.scrollWidth,
-      windowWidth: target.scrollWidth,
+    const p = JSON.parse(localStorage.getItem(XP_PREF_SK) || 'null');
+    if (p && typeof p === 'object') return { theme: XP_THEMES[p.theme] ? p.theme : 'dark', quality: ['2','3','4'].includes(String(p.quality)) ? String(p.quality) : '3', sel: Array.isArray(p.sel) ? p.sel : ['resumen'] };
+  } catch (_) {}
+  return { theme: 'dark', quality: '3', sel: ['resumen'] };
+}
+function xpSavePrefs(p) { try { localStorage.setItem(XP_PREF_SK, JSON.stringify(p)); } catch (_) {} }
+
+function xpBuild() {
+  xpEl = document.createElement('div');
+  xpEl.className = 'xp-overlay';
+  xpEl.innerHTML = `
+    <div class="xp-box" role="dialog" aria-modal="true" aria-labelledby="xpTitle">
+      <div class="xp-title" id="xpTitle">Exportar como imagen</div>
+      <div class="xp-sub">Elige una o varias imágenes. Cada una se genera en un lienzo fijo de alta resolución, así no pierden calidad aunque el préstamo sea largo.</div>
+      <div id="xpOpts"></div>
+      <div class="xp-row">
+        <div><div class="field-label">Tema</div>
+          <select id="xpTheme"><option value="dark">Oscuro</option><option value="light">Claro (ideal para imprimir)</option></select></div>
+        <div><div class="field-label">Calidad</div>
+          <select id="xpQuality"><option value="2">Normal (2×)</option><option value="3">Alta (3×)</option><option value="4">Máxima (4×)</option></select></div>
+      </div>
+      <div class="xp-hint">Si eliges varias imágenes, el navegador puede pedirte permiso para descargar varios archivos. La calidad máxima se ajusta sola si la imagen fuera demasiado grande para tu dispositivo.</div>
+      <div class="xp-btns">
+        <button type="button" class="btn btn-ghost" id="xpCancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="xpGo">Generar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(xpEl);
+  xpEl.addEventListener('click', e => { if (e.target === xpEl) xpClose(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && xpEl.classList.contains('open')) xpClose(); });
+  document.getElementById('xpCancel').addEventListener('click', xpClose);
+  document.getElementById('xpGo').addEventListener('click', xpGenerate);
+}
+function xpClose() { if (!xpBusy && xpEl) xpEl.classList.remove('open'); }
+
+let xpInfo = {};   // { id: {pages, empty} } calculado al abrir
+function xpRefresh() {
+  const c = xpData(), prefs = xpLoadPrefs();
+  xpInfo = {
+    resumen:    { pages: 1, info: '' },
+    hoy:        { pages: 1, info: '' },
+    pendientes: { pages: xpChunks(c.pendientes).length, info: xpPlural(c.pendientes.length, 'cuota', 'cuotas'), empty: !c.pendientes.length },
+    pagadas:    { pages: xpChunks(c.pagadas).length,    info: xpPlural(c.pagadas.length, 'cuota', 'cuotas'),    empty: !c.pagadas.length },
+    abonos:     { pages: xpChunks(c.abonos).length,     info: xpPlural(c.abonos.length, 'abono', 'abonos'),     empty: !c.abonos.length },
+    completa:   { pages: xpChunks(c.rows).length,       info: xpPlural(PLAZO_MESES, 'cuota', 'cuotas') }
+  };
+  document.getElementById('xpTheme').value = prefs.theme;
+  document.getElementById('xpQuality').value = prefs.quality;
+  const box = document.getElementById('xpOpts');
+  box.innerHTML = '';
+  XP_OPTIONS.forEach(o => {
+    const n = xpInfo[o.id];
+    const lab = document.createElement('label');
+    lab.className = 'xp-opt' + (n.empty ? ' disabled' : '');
+    lab.innerHTML = `<input type="checkbox" id="xp-${o.id}" ${n.empty ? 'disabled' : ''} ${(!n.empty && prefs.sel.includes(o.id)) ? 'checked' : ''}>
+      <div style="flex:1;min-width:0"><div class="xp-opt-t">${o.title}</div><div class="xp-opt-d">${o.desc}</div></div>
+      <div class="xp-opt-n">${n.empty ? 'sin datos' : `${n.info ? n.info + ' · ' : ''}${xpPlural(n.pages, 'imagen', 'imágenes')}`}</div>`;
+    box.appendChild(lab);
+    lab.querySelector('input').addEventListener('change', xpUpdateGo);
+  });
+  xpUpdateGo();
+}
+function xpSelected() { return XP_OPTIONS.filter(o => { const el = document.getElementById('xp-' + o.id); return el && el.checked && !el.disabled; }); }
+function xpUpdateGo() {
+  document.querySelectorAll('.xp-opt').forEach(l => l.classList.toggle('checked', l.querySelector('input').checked));
+  const sel = xpSelected(), total = sel.reduce((s, o) => s + xpInfo[o.id].pages, 0);
+  const go = document.getElementById('xpGo');
+  go.disabled = total === 0;
+  go.textContent = total === 0 ? 'Elige al menos una opción' : `Generar ${xpPlural(total, 'imagen', 'imágenes')}`;
+}
+
+async function xpGenerate() {
+  if (xpBusy) return;
+  if (typeof html2canvas === 'undefined') { showToast('No se pudo cargar el generador de imágenes (revisa tu conexión).', 'error', 5000); return; }
+  const sel = xpSelected();
+  if (!sel.length) return;
+  const theme = document.getElementById('xpTheme').value, quality = document.getElementById('xpQuality').value;
+  xpSavePrefs({ theme, quality, sel: sel.map(o => o.id) });
+  const P = XP_THEMES[theme] || XP_THEMES.dark, scale = parseFloat(quality) || 3;
+  const go = document.getElementById('xpGo'), cancel = document.getElementById('xpCancel');
+  xpBusy = true; go.disabled = true; cancel.disabled = true;
+  try {
+    const c = xpData();
+    const jobs = [];
+    sel.forEach(o => {
+      const pages = XP_BUILDERS[o.id](P, c);
+      pages.forEach((pg, k) => jobs.push({
+        name: `prestamo_jfk_${o.id}${pages.length > 1 ? `_${k + 1}de${pages.length}` : ''}`,
+        html: xpFrame(P, pg.kicker, pg.body, k + 1, pages.length)
+      }));
     });
-
-    const ts = new Date().toISOString().slice(0, 10);
-    canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = `resumen_prestamo_jfk_${ts}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Imagen exportada correctamente', 'success', 4000);
-    }, 'image/png');
-
-    // Success toast is shown inside toBlob callback above
+    const ts = (() => { const t = todayUTC(); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`; })();
+    for (let j = 0; j < jobs.length; j++) {
+      go.textContent = `Generando ${j + 1} de ${jobs.length}…`;
+      await new Promise(r => setTimeout(r, 30));   // deja repintar el botón
+      const canvas = await xpRender(jobs[j].html, scale, P.bg);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('la imagen es demasiado grande para este dispositivo; baja la calidad');
+      xpDownload(blob, `${jobs[j].name}_${ts}.png`);
+      if (j < jobs.length - 1) await new Promise(r => setTimeout(r, 450));
+    }
+    showToast(jobs.length === 1 ? 'Imagen exportada correctamente' : `${jobs.length} imágenes exportadas`, 'success', 4000);
+    xpBusy = false;
+    xpClose();
   } catch (err) {
     _dbg('[exportImage]', err);
-    showBackupToast('Error al generar imagen: ' + err.message, 'error');
+    showToast('Error al generar imagen: ' + (err && err.message ? err.message : err), 'error', 6000);
   } finally {
-    // Restaurar visibilidad de elementos ocultos temporalmente
-    hidden.forEach(el => {
-      delete el.dataset.h2cHidden;
-      el.style.display = '';
-    });
-    // Restore button state
-    if (exportBtn) {
-      exportBtn.disabled = false;
-      exportBtn.innerHTML = origBtnHTML;
-    }
+    xpBusy = false; cancel.disabled = false;
+    xpUpdateGo();
   }
+}
+
+// Punto de entrada del botón "Exportar resumen como imagen"
+function exportImage() {
+  if (!xpEl) xpBuild();
+  xpRefresh();
+  xpEl.classList.add('open');
 }
 
 // ── TEST UI WRAPPER ───────────────────────────────────────────────────────────
