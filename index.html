@@ -741,6 +741,11 @@ body.view-summary .full-view { display: none; }
 .fp-date{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1.15;}
 .fp-con .fp-date{color:var(--green);}
 .fp-sub{font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;}
+.fp-tot-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 4px;padding-top:11px;border-top:1px solid var(--border);}
+.fp-tot{font-size:19px;font-weight:700;font-family:var(--mono);line-height:1.15;}
+.fp-con .fp-tot{color:var(--green);}
+.fp-progress{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:12px;color:var(--text2);}
+.fp-progress strong{font-family:var(--mono);color:var(--text);margin-left:4px;}
 .fp-diff{margin-top:11px;font-size:12px;color:var(--text2);line-height:1.6;}
 .fp-diff strong{color:var(--green);}
 .fp-note{margin-top:6px;font-size:10px;color:var(--text3);line-height:1.6;}
@@ -3160,23 +3165,31 @@ function renderVerificacion() {
     ${syncInfo}`;
 }
 
-// ── FIN DEL PLAZO ─────────────────────────────────────────────────────────────
+// ── FIN DEL PLAZO Y TOTAL A PAGAR ─────────────────────────────────────────────
 // Compara el plan normal (sin abonos) con el plan actual (con los abonos ya
 // registrados, suponiendo que no se abona nada más y que cada cuota se paga en
 // su fecha programada). Las cuotas "eliminadas" por abonos no cuentan.
+// "Total a pagar" = capital + intereses + GMF de todo el préstamo (sin mora).
 function calcFinPlan(rows) {
-  let last = -1, efect = 0, intConAbonos = 0, abonado = 0;
+  let last = -1, efect = 0, intCon = 0, gmfCon = 0, totalCon = 0, abonado = 0, falta = 0;
   rows.forEach((r, i) => {
     abonado += r.abono || 0;
     if (r.esPostLiquidacion || r.cap <= 0) return;
-    last = i; efect++; intConAbonos += r.int;
+    last = i; efect++;
+    intCon += r.int; gmfCon += r.gmfEfectivo; totalCon += r.totalReal;   // totalReal = cuota + GMF + abono
+    if (!state.pagos[i].pagada) falta += r.totalReal - (r.abono || 0);   // el abono registrado ya se pagó
   });
-  const intNormal = AMORT_CALC.reduce((s, r) => s + r.int, 0);
+  const intNormal = AMORT_CALC.reduce((t, r) => t + r.int, 0);
+  const gmfNormal = AMORT_CALC.reduce((t, r) => t + r.gmf, 0);
+  const totalNormal = AMORT_CALC.reduce((t, r) => t + r.total, 0);       // cuota + GMF, sin abonos
   return {
     last, efect, abonado, hayAbonos: abonado > 0,
     cuotasAhorradas: PLAZO_MESES - efect,
-    intNormal, intConAbonos,
-    ahorro: Math.max(0, Math.round(rows.reduce((s, r) => s + (r.ahorroAbono || 0), 0))), // mismo dato que el banner de ahorro
+    intNormal, gmfNormal, totalNormal,
+    intCon, gmfCon, totalCon,
+    ahorroInt: Math.max(0, intNormal - intCon),
+    ahorroTotal: Math.max(0, totalNormal - totalCon),
+    falta, yaPagado: Math.max(0, totalCon - falta),
     fechaNormal: FECHAS_LABEL[PLAZO_MESES - 1],
     fechaCon: FECHAS_LABEL[last >= 0 ? last : PLAZO_MESES - 1]
   };
@@ -3184,33 +3197,39 @@ function calcFinPlan(rows) {
 // Frase de diferencia (texto plano + <strong>), compartida por la app y las imágenes.
 function finPlanDiff(f, strongOpen, strongClose) {
   const S = t => strongOpen + t + strongClose;
-  if (!f.hayAbonos) return 'Aún no tienes abonos a capital: con un abono extra terminas antes y pagas menos intereses.';
+  if (!f.hayAbonos) return 'Aún no tienes abonos a capital: con un abono extra terminas antes y pagas menos en total.';
   if (f.cuotasAhorradas > 0) {
     const n = f.cuotasAhorradas;
-    return `Terminas ${S(`${n} cuota${n === 1 ? '' : 's'} antes`)} (≈ ${n} mes${n === 1 ? '' : 'es'}) y ahorras ${S('≈ ' + fmt(f.ahorro))} en intereses.`;
+    return `Terminas ${S(`${n} cuota${n === 1 ? '' : 's'} antes`)} (≈ ${n} mes${n === 1 ? '' : 'es'}) y pagas ${S('≈ ' + fmt(f.ahorroTotal) + ' menos')} en total (${fmt(f.ahorroInt)} menos de intereses).`;
   }
-  return `Tus abonos todavía no acortan el plazo, pero ahorras ${S('≈ ' + fmt(f.ahorro))} en intereses.`;
+  return `Tus abonos todavía no acortan el plazo, pero pagas ${S('≈ ' + fmt(f.ahorroTotal) + ' menos')} en total (${fmt(f.ahorroInt)} menos de intereses).`;
 }
-const FIN_PLAN_NOTA = 'Suponiendo que pagas cada cuota en su fecha y no abonas más. Asume que la cooperativa aplica tus abonos como disminución de plazo (no de cuota).';
+const FIN_PLAN_NOTA = 'Suponiendo que pagas cada cuota en su fecha y no abonas más. Asume que la cooperativa aplica tus abonos como disminución de plazo (no de cuota). El total incluye capital, intereses y GMF; no incluye mora.';
 function finPlanHtml(rows) {
   const f = calcFinPlan(rows);
-  const conSub = f.hayAbonos
-    ? `Cuota ${f.last + 1} de ${PLAZO_MESES} · intereses ${fmt(f.intConAbonos)}`
-    : 'Sin abonos registrados: igual al plan normal';
+  const conCuota = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES}` : 'Sin abonos registrados: igual al plan normal';
+  const desglose = (cap, int, gmf) => `capital ${fmt(cap)} + intereses ${fmt(int)} + GMF ${fmt(gmf)}`;
   return `<div class="fin-plan">
-    <div class="fp-title"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>¿Cuándo termino de pagar?</div>
+    <div class="fp-title"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>¿Cuándo termino y cuánto pago en total?</div>
     <div class="fp-grid">
       <div class="fp-col">
         <div class="fp-label">Plan normal (sin abonos)</div>
         <div class="fp-date">${f.fechaNormal}</div>
-        <div class="fp-sub">Cuota ${PLAZO_MESES} de ${PLAZO_MESES} · intereses ${fmt(f.intNormal)}</div>
+        <div class="fp-sub">Cuota ${PLAZO_MESES} de ${PLAZO_MESES}</div>
+        <div class="fp-tot-label">Total a pagar por el préstamo</div>
+        <div class="fp-tot">${fmt(f.totalNormal)}</div>
+        <div class="fp-sub">${desglose(PRESTAMO_INICIAL, f.intNormal, f.gmfNormal)}</div>
       </div>
       <div class="fp-col fp-con">
         <div class="fp-label">Con tus abonos${f.hayAbonos ? ' (' + fmt(f.abonado) + ')' : ''}</div>
         <div class="fp-date">${f.fechaCon}</div>
-        <div class="fp-sub">${conSub}</div>
+        <div class="fp-sub">${conCuota}</div>
+        <div class="fp-tot-label">Total a pagar por el préstamo</div>
+        <div class="fp-tot">${fmt(f.totalCon)}</div>
+        <div class="fp-sub">${desglose(PRESTAMO_INICIAL, f.intCon, f.gmfCon)}${f.hayAbonos ? ' (el capital incluye tus abonos)' : ''}</div>
       </div>
     </div>
+    <div class="fp-progress"><span>Ya pagado <strong>${fmt(f.yaPagado)}</strong></span><span>Falta por pagar <strong>${fmt(f.falta)}</strong></span></div>
     <div class="fp-diff">${finPlanDiff(f, '<strong>', '</strong>')}</div>
     <div class="fp-note">${FIN_PLAN_NOTA}</div>
   </div>`;
@@ -3998,13 +4017,13 @@ function xpCard(P, title, inner) {
 function xpTable(P, cols, data) {
   const wsum = cols.reduce((t, c) => t + (c.w || 100), 0);
   const colgroup = cols.map(c => `<col style="width:${((c.w || 100) / wsum * 100).toFixed(2)}%">`).join('');
-  const th = cols.map(c => `<th style="text-align:${c.a || 'right'};padding:10px 8px;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;background:${P.head};white-space:nowrap">${c.h}</th>`).join('');
-  const trs = data.map((r, ri) => `<tr style="background:${ri % 2 ? P.stripe : 'transparent'}">${r.map((cell, ci) => {
+  const th = cols.map(c => `<th style="display:table-cell;text-align:${c.a || 'right'};padding:10px 8px;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;background:${P.head};white-space:nowrap">${c.h}</th>`).join('');
+  const trs = data.map((r, ri) => `<tr style="display:table-row;margin:0;padding:0;border:0;box-shadow:none;background:${ri % 2 ? P.stripe : 'transparent'}">${r.map((cell, ci) => {
     const o = (cell && typeof cell === 'object') ? cell : { t: cell };
     const col = cols[ci];
-    return `<td style="text-align:${col.a || 'right'};padding:9px 8px;font-size:12px;border-top:1px solid ${P.border};white-space:nowrap;color:${o.c || P.text};font-weight:${o.b ? 700 : 500};${col.m === false ? '' : XP_MONO}">${o.t}</td>`;
+    return `<td style="display:table-cell;text-align:${col.a || 'right'};padding:9px 8px;font-size:12px;border-top:1px solid ${P.border};white-space:nowrap;color:${o.c || P.text};font-weight:${o.b ? 700 : 500};${col.m === false ? '' : XP_MONO}">${o.t}</td>`;
   }).join('')}</tr>`).join('');
-  return `<div style="border:1px solid ${P.border};border-radius:12px;overflow:hidden;background:${P.card}"><table style="width:100%;min-width:0;table-layout:fixed;border-collapse:collapse"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
+  return `<div style="border:1px solid ${P.border};border-radius:12px;overflow:hidden;background:${P.card}"><table style="display:table;width:100%;min-width:0;table-layout:fixed;border-collapse:collapse"><colgroup>${colgroup}</colgroup><thead style="display:table-header-group"><tr style="display:table-row">${th}</tr></thead><tbody style="display:table-row-group">${trs}</tbody></table></div>`;
 }
 function xpFrame(P, kicker, body, page, pages) {
   const gen = new Date().toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
@@ -4026,20 +4045,27 @@ function xpFrame(P, kicker, body, page, pages) {
     </div>
   </div>`;
 }
-// Bloque "¿Cuándo termino de pagar?" para las imágenes
+// Bloque "¿Cuándo termino y cuánto pago en total?" para las imágenes
 function xpFinPlan(P, c) {
   const f = calcFinPlan(c.rows);
-  const col = (label, date, sub, color, border) => `<div style="flex:1;background:${P.card2};border:1px solid ${border};border-radius:10px;padding:12px 14px">
+  const desglose = (int, gmf) => `capital ${fmt(PRESTAMO_INICIAL)} + intereses ${fmt(int)} + GMF ${fmt(gmf)}`;
+  const col = (label, date, sub, total, tsub, color, border) => `<div style="flex:1;background:${P.card2};border:1px solid ${border};border-radius:10px;padding:12px 14px">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;margin-bottom:6px">${label}</div>
       <div style="font-size:22px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${date}</div>
-      <div style="font-size:12px;color:${P.text2};margin-top:6px">${sub}</div></div>`;
-  const con = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES} · intereses ${fmt(f.intConAbonos)}` : 'Sin abonos registrados: igual al plan normal';
-  return xpCard(P, '¿Cuándo termino de pagar?',
+      <div style="font-size:12px;color:${P.text2};margin-top:5px">${sub}</div>
+      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;margin:12px 0 4px;padding-top:11px;border-top:1px solid ${P.border}">Total a pagar por el préstamo</div>
+      <div style="font-size:21px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${total}</div>
+      <div style="font-size:11.5px;color:${P.text2};margin-top:5px;line-height:1.5">${tsub}</div></div>`;
+  const conCuota = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES}` : 'Sin abonos registrados: igual al plan normal';
+  return xpCard(P, '¿Cuándo termino y cuánto pago en total?',
     `<div style="display:flex;gap:12px">` +
-      col('Plan normal (sin abonos)', f.fechaNormal, `Cuota ${PLAZO_MESES} de ${PLAZO_MESES} · intereses ${fmt(f.intNormal)}`, P.text, P.border) +
-      col('Con tus abonos' + (f.hayAbonos ? ` (${fmt(f.abonado)})` : ''), f.fechaCon, con, P.green, P.green) +
+      col('Plan normal (sin abonos)', f.fechaNormal, `Cuota ${PLAZO_MESES} de ${PLAZO_MESES}`, fmt(f.totalNormal), desglose(f.intNormal, f.gmfNormal), P.text, P.border) +
+      col('Con tus abonos' + (f.hayAbonos ? ` (${fmt(f.abonado)})` : ''), f.fechaCon, conCuota, fmt(f.totalCon), desglose(f.intCon, f.gmfCon) + (f.hayAbonos ? ' (el capital incluye tus abonos)' : ''), P.green, P.green) +
     `</div>
-    <div style="font-size:13px;color:${P.text2};margin-top:12px;line-height:1.6">${finPlanDiff(f, `<span style="color:${P.green};font-weight:700">`, '</span>')}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:${P.text2}">
+      <span>Ya pagado <b style="${XP_MONO};color:${P.text}">${fmt(f.yaPagado)}</b></span>
+      <span>Falta por pagar <b style="${XP_MONO};color:${P.amber}">${fmt(f.falta)}</b></span></div>
+    <div style="font-size:13px;color:${P.text2};margin-top:10px;line-height:1.6">${finPlanDiff(f, `<span style="color:${P.green};font-weight:700">`, '</span>')}</div>
     <div style="font-size:11px;color:${P.text3};margin-top:5px;line-height:1.6">${FIN_PLAN_NOTA}</div>`);
 }
 // Agrega el bloque al final de la última imagen de una tabla paginada
