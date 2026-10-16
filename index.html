@@ -729,6 +729,31 @@ body.view-summary .full-view { display: none; }
 .sv-expand-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
 
 /* ── EXPORT IMAGE MODAL ──────────────────────────────────────────────── */
+/* Fin del plazo (cuándo termino de pagar) */
+.fin-plan{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);padding:16px 18px;margin-top:14px;}
+#svFinPlan .fin-plan{margin:0 0 16px;}
+.fp-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;display:flex;align-items:center;gap:7px;}
+.fp-title i{color:var(--green);font-size:11px;}
+.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fp-col{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:12px 14px;min-width:0;}
+.fp-col.fp-con{background:rgba(45,212,160,0.07);border-color:rgba(45,212,160,0.28);}
+.fp-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.fp-date{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1.15;}
+.fp-con .fp-date{color:var(--green);}
+.fp-sub{font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;}
+.fp-diff{margin-top:11px;font-size:12px;color:var(--text2);line-height:1.6;}
+.fp-diff strong{color:var(--green);}
+.fp-note{margin-top:6px;font-size:10px;color:var(--text3);line-height:1.6;}
+@media(max-width:600px){.fp-grid{grid-template-columns:1fr;}.fp-date{font-size:18px;}}
+
+/* Que el fondo NO se desplace mientras hay un diálogo abierto, ni al llegar al
+   tope de un scroll interno (menú de exportar, modales, tabla, log, verificación). */
+html{scrollbar-gutter:stable;}
+html:has(.xp-overlay.open),html:has(.abono-modal-overlay.open),html:has(#__confirmOverlay){overflow:hidden;}
+.xp-overlay,.xp-box,.abono-modal-overlay,.abono-modal-box,#__confirmOverlay{overscroll-behavior:contain;}
+.table-scroll{overscroll-behavior-x:contain;}
+#logList,#verificacionGrid,.verif-grid{overscroll-behavior:contain;}
+
 .xp-overlay{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,0.7);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:12px;}
 .xp-overlay.open{display:flex;}
 .xp-box{background:var(--bg3);border:1px solid var(--border3);border-radius:var(--radius-xl);width:480px;max-width:100%;max-height:92vh;overflow-y:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,0.6);}
@@ -859,6 +884,7 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
             cuotas</div>
           <div id="svNext3Body"></div>
         </div>
+        <div id="svFinPlan"></div>
         <button type="button" class="sv-expand-btn" id="svExpandBtn">
           <i class="fa-solid fa-table-list"></i> Ver tabla completa y
           herramientas
@@ -1382,6 +1408,9 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
             </table>
           </div>
         </div>
+
+        <!-- FIN DEL PLAZO: cuándo termino de pagar (plan normal vs. con mis abonos) -->
+        <div id="finPlan"></div>
 
       </div>
 
@@ -3131,11 +3160,73 @@ function renderVerificacion() {
     ${syncInfo}`;
 }
 
+// ── FIN DEL PLAZO ─────────────────────────────────────────────────────────────
+// Compara el plan normal (sin abonos) con el plan actual (con los abonos ya
+// registrados, suponiendo que no se abona nada más y que cada cuota se paga en
+// su fecha programada). Las cuotas "eliminadas" por abonos no cuentan.
+function calcFinPlan(rows) {
+  let last = -1, efect = 0, intConAbonos = 0, abonado = 0;
+  rows.forEach((r, i) => {
+    abonado += r.abono || 0;
+    if (r.esPostLiquidacion || r.cap <= 0) return;
+    last = i; efect++; intConAbonos += r.int;
+  });
+  const intNormal = AMORT_CALC.reduce((s, r) => s + r.int, 0);
+  return {
+    last, efect, abonado, hayAbonos: abonado > 0,
+    cuotasAhorradas: PLAZO_MESES - efect,
+    intNormal, intConAbonos,
+    ahorro: Math.max(0, Math.round(rows.reduce((s, r) => s + (r.ahorroAbono || 0), 0))), // mismo dato que el banner de ahorro
+    fechaNormal: FECHAS_LABEL[PLAZO_MESES - 1],
+    fechaCon: FECHAS_LABEL[last >= 0 ? last : PLAZO_MESES - 1]
+  };
+}
+// Frase de diferencia (texto plano + <strong>), compartida por la app y las imágenes.
+function finPlanDiff(f, strongOpen, strongClose) {
+  const S = t => strongOpen + t + strongClose;
+  if (!f.hayAbonos) return 'Aún no tienes abonos a capital: con un abono extra terminas antes y pagas menos intereses.';
+  if (f.cuotasAhorradas > 0) {
+    const n = f.cuotasAhorradas;
+    return `Terminas ${S(`${n} cuota${n === 1 ? '' : 's'} antes`)} (≈ ${n} mes${n === 1 ? '' : 'es'}) y ahorras ${S('≈ ' + fmt(f.ahorro))} en intereses.`;
+  }
+  return `Tus abonos todavía no acortan el plazo, pero ahorras ${S('≈ ' + fmt(f.ahorro))} en intereses.`;
+}
+const FIN_PLAN_NOTA = 'Suponiendo que pagas cada cuota en su fecha y no abonas más. Asume que la cooperativa aplica tus abonos como disminución de plazo (no de cuota).';
+function finPlanHtml(rows) {
+  const f = calcFinPlan(rows);
+  const conSub = f.hayAbonos
+    ? `Cuota ${f.last + 1} de ${PLAZO_MESES} · intereses ${fmt(f.intConAbonos)}`
+    : 'Sin abonos registrados: igual al plan normal';
+  return `<div class="fin-plan">
+    <div class="fp-title"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>¿Cuándo termino de pagar?</div>
+    <div class="fp-grid">
+      <div class="fp-col">
+        <div class="fp-label">Plan normal (sin abonos)</div>
+        <div class="fp-date">${f.fechaNormal}</div>
+        <div class="fp-sub">Cuota ${PLAZO_MESES} de ${PLAZO_MESES} · intereses ${fmt(f.intNormal)}</div>
+      </div>
+      <div class="fp-col fp-con">
+        <div class="fp-label">Con tus abonos${f.hayAbonos ? ' (' + fmt(f.abonado) + ')' : ''}</div>
+        <div class="fp-date">${f.fechaCon}</div>
+        <div class="fp-sub">${conSub}</div>
+      </div>
+    </div>
+    <div class="fp-diff">${finPlanDiff(f, '<strong>', '</strong>')}</div>
+    <div class="fp-note">${FIN_PLAN_NOTA}</div>
+  </div>`;
+}
+function renderFinPlan(rows) {
+  const html = finPlanHtml(rows);
+  const a = document.getElementById('finPlan'); if (a) a.innerHTML = html;
+  const b = document.getElementById('svFinPlan'); if (b) b.innerHTML = html;
+}
+
 // ── MAIN RENDER ───────────────────────────────────────────────────────────────
 function render() {
   const rows = calcRows();
   renderMetrics(rows);
   renderTable(rows);
+  renderFinPlan(rows);
   renderVerificacion();
   calcDeudaFecha();
   if (document.body.classList.contains('view-summary')) renderSummaryView();
@@ -3935,6 +4026,29 @@ function xpFrame(P, kicker, body, page, pages) {
     </div>
   </div>`;
 }
+// Bloque "¿Cuándo termino de pagar?" para las imágenes
+function xpFinPlan(P, c) {
+  const f = calcFinPlan(c.rows);
+  const col = (label, date, sub, color, border) => `<div style="flex:1;background:${P.card2};border:1px solid ${border};border-radius:10px;padding:12px 14px">
+      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;margin-bottom:6px">${label}</div>
+      <div style="font-size:22px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${date}</div>
+      <div style="font-size:12px;color:${P.text2};margin-top:6px">${sub}</div></div>`;
+  const con = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES} · intereses ${fmt(f.intConAbonos)}` : 'Sin abonos registrados: igual al plan normal';
+  return xpCard(P, '¿Cuándo termino de pagar?',
+    `<div style="display:flex;gap:12px">` +
+      col('Plan normal (sin abonos)', f.fechaNormal, `Cuota ${PLAZO_MESES} de ${PLAZO_MESES} · intereses ${fmt(f.intNormal)}`, P.text, P.border) +
+      col('Con tus abonos' + (f.hayAbonos ? ` (${fmt(f.abonado)})` : ''), f.fechaCon, con, P.green, P.green) +
+    `</div>
+    <div style="font-size:13px;color:${P.text2};margin-top:12px;line-height:1.6">${finPlanDiff(f, `<span style="color:${P.green};font-weight:700">`, '</span>')}</div>
+    <div style="font-size:11px;color:${P.text3};margin-top:5px;line-height:1.6">${FIN_PLAN_NOTA}</div>`);
+}
+// Agrega el bloque al final de la última imagen de una tabla paginada
+function xpWithFin(P, c, pages) {
+  const last = pages[pages.length - 1];
+  last.body += `<div style="margin-top:16px">${xpFinPlan(P, c)}</div>`;
+  return pages;
+}
+
 function xpNext3(P, c) {
   const list = c.pendientes.slice(0, 3);
   if (!list.length) return `<div style="color:${P.green};font-size:14px;font-weight:600;padding:4px 0">¡Todas las cuotas están pagadas!</div>`;
@@ -4007,6 +4121,7 @@ function xpResumenPages(P, c) {
       xpStat(P, 'Abonado a capital', fmt(res.totAbonos), P.green, res.totAbonos > 0 ? 'reduce saldo e intereses' : 'sin abonos aún') +
       xpStat(P, 'Deuda total hoy', fmt(estHoy.deuda), P.amber, `capital + ${fmt(estHoy.intAcum)} de interés`)) +
     xpCard(P, 'Progreso del préstamo', progress) +
+    xpFinPlan(P, c) +
     xpCard(P, 'Capital vs. intereses · saldo proyectado', xpChartHtml(P, rows)) +
     xpCard(P, 'Próximas cuotas', xpNext3(P, c));
   return [{ kicker: 'Resumen general', body }];
@@ -4073,7 +4188,7 @@ function xpPendientesPages(P, c) {
   if (c.pendientes.some(i => daysBetween(today, rows[i].fechaProg) < 0)) {
     pages.forEach(pg => { pg.body += `<div style="font-size:11.5px;color:${P.text3};margin-top:10px">Las fechas en <span style="color:${P.red};font-weight:600">rojo</span> corresponden a cuotas vencidas (con mora según el pagaré).</div>`; });
   }
-  return pages;
+  return xpWithFin(P, c, pages);
 }
 
 function xpPagadasPages(P, c) {
@@ -4120,7 +4235,7 @@ function xpAbonosPages(P, c) {
       fmt(r.saldoCalc)
     ];
   };
-  return xpTablePages(P, 'Abonos a capital', c.abonos, cols, rowFn, tiles);
+  return xpWithFin(P, c, xpTablePages(P, 'Abonos a capital', c.abonos, cols, rowFn, tiles));
 }
 
 function xpCompletaPages(P, c) {
@@ -4146,7 +4261,7 @@ function xpCompletaPages(P, c) {
       fmt(r.saldoCalc)
     ];
   };
-  return xpTablePages(P, 'Tabla de amortización', rows.map((_, i) => i), cols, rowFn, tiles);
+  return xpWithFin(P, c, xpTablePages(P, 'Tabla de amortización', rows.map((_, i) => i), cols, rowFn, tiles));
 }
 
 const XP_BUILDERS = {
@@ -4220,6 +4335,17 @@ function xpBuild() {
     </div>`;
   document.body.appendChild(xpEl);
   xpEl.addEventListener('click', e => { if (e.target === xpEl) xpClose(); });
+  // El fondo no se mueve: ni al tocar fuera de la tarjeta, ni al llegar al tope/fondo de su scroll.
+  xpEl.addEventListener('touchmove', e => { if (!e.target.closest('.xp-box')) e.preventDefault(); }, { passive: false });
+  const xpBox = xpEl.querySelector('.xp-box');
+  let xpTouchY = 0;
+  xpBox.addEventListener('touchstart', e => { xpTouchY = e.touches[0].clientY; }, { passive: true });
+  xpBox.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - xpTouchY;
+    const atTop = xpBox.scrollTop <= 0, atBottom = xpBox.scrollTop + xpBox.clientHeight >= xpBox.scrollHeight - 1;
+    if ((atTop && dy > 0) || (atBottom && dy < 0)) e.preventDefault();
+  }, { passive: false });
+  xpEl.addEventListener('wheel', e => { if (!e.target.closest('.xp-box')) e.preventDefault(); }, { passive: false });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && xpEl.classList.contains('open')) xpClose(); });
   document.getElementById('xpCancel').addEventListener('click', xpClose);
   document.getElementById('xpGo').addEventListener('click', xpGenerate);
