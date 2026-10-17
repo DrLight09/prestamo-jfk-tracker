@@ -729,27 +729,28 @@ body.view-summary .full-view { display: none; }
 .sv-expand-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border3); }
 
 /* ── EXPORT IMAGE MODAL ──────────────────────────────────────────────── */
-/* Fin del plazo (cuándo termino de pagar) */
-.fin-plan{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xl);padding:16px 18px;margin-top:14px;}
-#svFinPlan .fin-plan{margin:0 0 16px;}
-.fp-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;display:flex;align-items:center;gap:7px;}
-.fp-title i{color:var(--green);font-size:11px;}
-.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.fp-col{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:12px 14px;min-width:0;}
-.fp-col.fp-con{background:rgba(45,212,160,0.07);border-color:rgba(45,212,160,0.28);}
-.fp-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
-.fp-date{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1.15;}
-.fp-con .fp-date{color:var(--green);}
-.fp-sub{font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;}
-.fp-tot-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 4px;padding-top:11px;border-top:1px solid var(--border);}
-.fp-tot{font-size:19px;font-weight:700;font-family:var(--mono);line-height:1.15;}
-.fp-con .fp-tot{color:var(--green);}
-.fp-progress{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:12px;color:var(--text2);}
-.fp-progress strong{font-family:var(--mono);color:var(--text);margin-left:4px;}
-.fp-diff{margin-top:11px;font-size:12px;color:var(--text2);line-height:1.6;}
-.fp-diff strong{color:var(--green);}
-.fp-note{margin-top:6px;font-size:10px;color:var(--text3);line-height:1.6;}
-@media(max-width:600px){.fp-grid{grid-template-columns:1fr;}.fp-date{font-size:18px;}}
+/* Fila de TOTAL al final de la tabla (igual a la del banco) */
+tfoot td{border-top:1px solid var(--border);background:var(--bg2);padding:10px 12px;font-size:12px;vertical-align:middle;white-space:nowrap;}
+tfoot tr.tf-banco td{border-top:2px solid var(--border3);}
+tfoot .tf-label{font-weight:700;font-size:12px;color:var(--text);white-space:normal;line-height:1.35;}
+tfoot .tf-sub{display:block;font-weight:500;font-size:10.5px;color:var(--text3);margin-top:2px;}
+tfoot tr.tf-con td{background:rgba(45,212,160,0.06);}
+tfoot tr.tf-con .tf-label{color:var(--green);}
+tfoot .num{font-family:var(--mono);font-size:11.5px;font-weight:700;}
+tfoot tr.tf-con .num.tf-big{color:var(--green);}
+tfoot .num.tf-big{color:var(--amber);}
+tfoot .tf-note td{font-size:10.5px;color:var(--text3);white-space:normal;line-height:1.5;padding-top:8px;padding-bottom:10px;}
+@media(max-width:600px){
+  tfoot,tfoot tr{display:block;}
+  tfoot tr{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:13px;margin-top:10px;}
+  tfoot tr.tf-con{background:rgba(45,212,160,0.07);border-color:rgba(45,212,160,0.3);}
+  tfoot td{display:flex;flex-direction:column;gap:2px;border:none!important;background:transparent!important;padding:0;white-space:normal;text-align:left;}
+  tfoot td:empty{display:none;}
+  tfoot td[data-label]::before{content:attr(data-label);font-size:9.5px;text-transform:uppercase;letter-spacing:0.4px;color:var(--text3);font-weight:600;}
+  tfoot td.tf-first{grid-column:1/-1;}
+  tfoot .tf-note{display:block;border:none;background:transparent;padding:0;margin-top:8px;}
+  tfoot .tf-note td{display:block;grid-column:1/-1;}
+}
 
 /* Que el fondo NO se desplace mientras hay un diálogo abierto, ni al llegar al
    tope de un scroll interno (menú de exportar, modales, tabla, log, verificación). */
@@ -889,7 +890,6 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
             cuotas</div>
           <div id="svNext3Body"></div>
         </div>
-        <div id="svFinPlan"></div>
         <button type="button" class="sv-expand-btn" id="svExpandBtn">
           <i class="fa-solid fa-table-list"></i> Ver tabla completa y
           herramientas
@@ -1410,12 +1410,10 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
                 </tr>
               </thead>
               <tbody id="tbody"></tbody>
+              <tfoot id="tfoot"></tfoot>
             </table>
           </div>
         </div>
-
-        <!-- FIN DEL PLAZO: cuándo termino de pagar (plan normal vs. con mis abonos) -->
-        <div id="finPlan"></div>
 
       </div>
 
@@ -3171,22 +3169,23 @@ function renderVerificacion() {
 // su fecha programada). Las cuotas "eliminadas" por abonos no cuentan.
 // "Total a pagar" = capital + intereses + GMF de todo el préstamo (sin mora).
 function calcFinPlan(rows) {
-  let last = -1, efect = 0, intCon = 0, gmfCon = 0, totalCon = 0, abonado = 0, falta = 0;
+  let last = -1, efect = 0, intCon = 0, gmfCon = 0, totalCon = 0, cuotaCon = 0, abonado = 0, falta = 0;
   rows.forEach((r, i) => {
     abonado += r.abono || 0;
     if (r.esPostLiquidacion || r.cap <= 0) return;
     last = i; efect++;
-    intCon += r.int; gmfCon += r.gmfEfectivo; totalCon += r.totalReal;   // totalReal = cuota + GMF + abono
+    intCon += r.int; gmfCon += r.gmfEfectivo; totalCon += r.totalReal; cuotaCon += r.cuota;   // totalReal = cuota + GMF + abono
     if (!state.pagos[i].pagada) falta += r.totalReal - (r.abono || 0);   // el abono registrado ya se pagó
   });
   const intNormal = AMORT_CALC.reduce((t, r) => t + r.int, 0);
   const gmfNormal = AMORT_CALC.reduce((t, r) => t + r.gmf, 0);
   const totalNormal = AMORT_CALC.reduce((t, r) => t + r.total, 0);       // cuota + GMF, sin abonos
+  const cuotaNormal = AMORT_CALC.reduce((t, r) => t + r.cuota, 0);
   return {
     last, efect, abonado, hayAbonos: abonado > 0,
     cuotasAhorradas: PLAZO_MESES - efect,
-    intNormal, gmfNormal, totalNormal,
-    intCon, gmfCon, totalCon,
+    intNormal, gmfNormal, totalNormal, cuotaNormal,
+    intCon, gmfCon, totalCon, cuotaCon,
     ahorroInt: Math.max(0, intNormal - intCon),
     ahorroTotal: Math.max(0, totalNormal - totalCon),
     falta, yaPagado: Math.max(0, totalCon - falta),
@@ -3194,50 +3193,38 @@ function calcFinPlan(rows) {
     fechaCon: FECHAS_LABEL[last >= 0 ? last : PLAZO_MESES - 1]
   };
 }
-// Frase de diferencia (texto plano + <strong>), compartida por la app y las imágenes.
-function finPlanDiff(f, strongOpen, strongClose) {
-  const S = t => strongOpen + t + strongClose;
-  if (!f.hayAbonos) return 'Aún no tienes abonos a capital: con un abono extra terminas antes y pagas menos en total.';
-  if (f.cuotasAhorradas > 0) {
-    const n = f.cuotasAhorradas;
-    return `Terminas ${S(`${n} cuota${n === 1 ? '' : 's'} antes`)} (≈ ${n} mes${n === 1 ? '' : 'es'}) y pagas ${S('≈ ' + fmt(f.ahorroTotal) + ' menos')} en total (${fmt(f.ahorroInt)} menos de intereses).`;
-  }
-  return `Tus abonos todavía no acortan el plazo, pero pagas ${S('≈ ' + fmt(f.ahorroTotal) + ' menos')} en total (${fmt(f.ahorroInt)} menos de intereses).`;
-}
-const FIN_PLAN_NOTA = 'Suponiendo que pagas cada cuota en su fecha y no abonas más. Asume que la cooperativa aplica tus abonos como disminución de plazo (no de cuota). El total incluye capital, intereses y GMF; no incluye mora.';
-function finPlanHtml(rows) {
+// Fila(s) de TOTAL al pie de la tabla, para la última cuota (la 36).
+// 1) Plan del banco sin abonos (coincide con la fila TOTAL de la tabla del banco).
+// 2) Solo si hay abonos: total con los abonos registrados y cuándo se termina.
+function renderTableFoot(rows) {
+  const tf = document.getElementById('tfoot');
+  if (!tf) return;
   const f = calcFinPlan(rows);
-  const conCuota = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES}` : 'Sin abonos registrados: igual al plan normal';
-  const desglose = (cap, int, gmf) => `capital ${fmt(cap)} + intereses ${fmt(int)} + GMF ${fmt(gmf)}`;
-  return `<div class="fin-plan">
-    <div class="fp-title"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>¿Cuándo termino y cuánto pago en total?</div>
-    <div class="fp-grid">
-      <div class="fp-col">
-        <div class="fp-label">Plan normal (sin abonos)</div>
-        <div class="fp-date">${f.fechaNormal}</div>
-        <div class="fp-sub">Cuota ${PLAZO_MESES} de ${PLAZO_MESES}</div>
-        <div class="fp-tot-label">Total a pagar por el préstamo</div>
-        <div class="fp-tot">${fmt(f.totalNormal)}</div>
-        <div class="fp-sub">${desglose(PRESTAMO_INICIAL, f.intNormal, f.gmfNormal)}</div>
-      </div>
-      <div class="fp-col fp-con">
-        <div class="fp-label">Con tus abonos${f.hayAbonos ? ' (' + fmt(f.abonado) + ')' : ''}</div>
-        <div class="fp-date">${f.fechaCon}</div>
-        <div class="fp-sub">${conCuota}</div>
-        <div class="fp-tot-label">Total a pagar por el préstamo</div>
-        <div class="fp-tot">${fmt(f.totalCon)}</div>
-        <div class="fp-sub">${desglose(PRESTAMO_INICIAL, f.intCon, f.gmfCon)}${f.hayAbonos ? ' (el capital incluye tus abonos)' : ''}</div>
-      </div>
-    </div>
-    <div class="fp-progress"><span>Ya pagado <strong>${fmt(f.yaPagado)}</strong></span><span>Falta por pagar <strong>${fmt(f.falta)}</strong></span></div>
-    <div class="fp-diff">${finPlanDiff(f, '<strong>', '</strong>')}</div>
-    <div class="fp-note">${FIN_PLAN_NOTA}</div>
-  </div>`;
-}
-function renderFinPlan(rows) {
-  const html = finPlanHtml(rows);
-  const a = document.getElementById('finPlan'); if (a) a.innerHTML = html;
-  const b = document.getElementById('svFinPlan'); if (b) b.innerHTML = html;
+  const nCuotas = n => `${n} cuota${n === 1 ? '' : 's'}`;
+  const fila = (cls, label, sub, cap, int, cuota, gmf, total, extra) => `
+    <tr class="${cls}">
+      <td colspan="4" class="tf-first" data-label=""><span class="tf-label">${label}<span class="tf-sub">${sub}</span></span></td>
+      <td class="col-extra" data-label="Capital total"><span class="num">${fmt(cap)}</span></td>
+      <td class="col-extra" data-label="Intereses totales"><span class="num">${fmt(int)}</span></td>
+      <td class="col-extra"></td>
+      <td class="col-extra" data-label="${extra ? 'Ahorro' : ''}">${extra}</td>
+      <td class="col-extra" data-label="Suma de cuotas"><span class="num">${fmt(cuota)}</span></td>
+      <td class="col-extra" data-label="GMF total"><span class="num">${fmt(gmf)}</span></td>
+      <td data-label="Total a pagar"><span class="num tf-big">${fmt(total)}</span></td>
+      <td data-label="Saldo final"><span class="num">$0</span></td>
+      <td></td>
+      <td class="col-extra"></td>
+    </tr>`;
+  let html = fila('tf-banco', 'TOTAL del préstamo', `Plan del banco, sin abonos · termina ${f.fechaNormal}`,
+                  PRESTAMO_INICIAL, f.intNormal, f.cuotaNormal, f.gmfNormal, f.totalNormal, '');
+  if (f.hayAbonos) {
+    const ahorro = `<span class="num" style="color:var(--green)">≈ ${fmt(f.ahorroTotal)}</span>`;
+    html += fila('tf-con', 'TOTAL con tus abonos',
+                 `Termina ${f.fechaCon} · cuota ${f.last + 1} de ${PLAZO_MESES}` + (f.cuotasAhorradas > 0 ? ` (${nCuotas(f.cuotasAhorradas)} menos)` : ''),
+                 PRESTAMO_INICIAL, f.intCon, f.cuotaCon, f.gmfCon, f.totalCon, ahorro);
+    html += `<tr class="tf-note"><td colspan="14">El capital incluye ${fmt(f.abonado)} de abonos. Estimado: cada abono acorta el plazo (como ya hace la tabla) y las demás cuotas se pagan en su fecha. No incluye mora. "Ahorro" = lo que pagas de menos frente al plan del banco.</td></tr>`;
+  }
+  tf.innerHTML = html;
 }
 
 // ── MAIN RENDER ───────────────────────────────────────────────────────────────
@@ -3245,7 +3232,7 @@ function render() {
   const rows = calcRows();
   renderMetrics(rows);
   renderTable(rows);
-  renderFinPlan(rows);
+  renderTableFoot(rows);
   renderVerificacion();
   calcDeudaFecha();
   if (document.body.classList.contains('view-summary')) renderSummaryView();
@@ -4045,36 +4032,6 @@ function xpFrame(P, kicker, body, page, pages) {
     </div>
   </div>`;
 }
-// Bloque "¿Cuándo termino y cuánto pago en total?" para las imágenes
-function xpFinPlan(P, c) {
-  const f = calcFinPlan(c.rows);
-  const desglose = (int, gmf) => `capital ${fmt(PRESTAMO_INICIAL)} + intereses ${fmt(int)} + GMF ${fmt(gmf)}`;
-  const col = (label, date, sub, total, tsub, color, border) => `<div style="flex:1;background:${P.card2};border:1px solid ${border};border-radius:10px;padding:12px 14px">
-      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;margin-bottom:6px">${label}</div>
-      <div style="font-size:22px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${date}</div>
-      <div style="font-size:12px;color:${P.text2};margin-top:5px">${sub}</div>
-      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${P.text3};font-weight:600;margin:12px 0 4px;padding-top:11px;border-top:1px solid ${P.border}">Total a pagar por el préstamo</div>
-      <div style="font-size:21px;font-weight:700;${XP_MONO};color:${color};line-height:1.15">${total}</div>
-      <div style="font-size:11.5px;color:${P.text2};margin-top:5px;line-height:1.5">${tsub}</div></div>`;
-  const conCuota = f.hayAbonos ? `Cuota ${f.last + 1} de ${PLAZO_MESES}` : 'Sin abonos registrados: igual al plan normal';
-  return xpCard(P, '¿Cuándo termino y cuánto pago en total?',
-    `<div style="display:flex;gap:12px">` +
-      col('Plan normal (sin abonos)', f.fechaNormal, `Cuota ${PLAZO_MESES} de ${PLAZO_MESES}`, fmt(f.totalNormal), desglose(f.intNormal, f.gmfNormal), P.text, P.border) +
-      col('Con tus abonos' + (f.hayAbonos ? ` (${fmt(f.abonado)})` : ''), f.fechaCon, conCuota, fmt(f.totalCon), desglose(f.intCon, f.gmfCon) + (f.hayAbonos ? ' (el capital incluye tus abonos)' : ''), P.green, P.green) +
-    `</div>
-    <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:${P.text2}">
-      <span>Ya pagado <b style="${XP_MONO};color:${P.text}">${fmt(f.yaPagado)}</b></span>
-      <span>Falta por pagar <b style="${XP_MONO};color:${P.amber}">${fmt(f.falta)}</b></span></div>
-    <div style="font-size:13px;color:${P.text2};margin-top:10px;line-height:1.6">${finPlanDiff(f, `<span style="color:${P.green};font-weight:700">`, '</span>')}</div>
-    <div style="font-size:11px;color:${P.text3};margin-top:5px;line-height:1.6">${FIN_PLAN_NOTA}</div>`);
-}
-// Agrega el bloque al final de la última imagen de una tabla paginada
-function xpWithFin(P, c, pages) {
-  const last = pages[pages.length - 1];
-  last.body += `<div style="margin-top:16px">${xpFinPlan(P, c)}</div>`;
-  return pages;
-}
-
 function xpNext3(P, c) {
   const list = c.pendientes.slice(0, 3);
   if (!list.length) return `<div style="color:${P.green};font-size:14px;font-weight:600;padding:4px 0">¡Todas las cuotas están pagadas!</div>`;
@@ -4147,7 +4104,7 @@ function xpResumenPages(P, c) {
       xpStat(P, 'Abonado a capital', fmt(res.totAbonos), P.green, res.totAbonos > 0 ? 'reduce saldo e intereses' : 'sin abonos aún') +
       xpStat(P, 'Deuda total hoy', fmt(estHoy.deuda), P.amber, `capital + ${fmt(estHoy.intAcum)} de interés`)) +
     xpCard(P, 'Progreso del préstamo', progress) +
-    xpFinPlan(P, c) +
+    xpTotalTiles(P, c) +
     xpCard(P, 'Capital vs. intereses · saldo proyectado', xpChartHtml(P, rows)) +
     xpCard(P, 'Próximas cuotas', xpNext3(P, c));
   return [{ kicker: 'Resumen general', body }];
@@ -4183,8 +4140,35 @@ function xpHoyPages(P, c) {
   return [{ kicker: 'Deuda de hoy', body: hero + tiles + prox + xpCard(P, 'Próximas cuotas', xpNext3(P, c)) + nota }];
 }
 
-function xpTablePages(P, kicker, indices, cols, rowFn, tilesHtml) {
-  return xpChunks(indices).map(chunk => ({ kicker, body: tilesHtml + xpTable(P, cols, chunk.map(rowFn)) }));
+function xpTablePages(P, kicker, indices, cols, rowFn, tilesHtml, footRows) {
+  const chunks = xpChunks(indices);
+  return chunks.map((chunk, k) => {
+    const rows = chunk.map(rowFn);
+    const esUltima = k === chunks.length - 1;
+    return { kicker, body: tilesHtml + xpTable(P, cols, esUltima && footRows ? rows.concat(footRows.rows) : rows) +
+                           (esUltima && footRows && footRows.note ? footRows.note : '') };
+  });
+}
+// Filas TOTAL al pie de la tabla completa (columnas: #, Fecha, Estado, Capital, Interés, Abono, GMF, Total, Saldo)
+function xpTotalRows(P, c) {
+  const f = calcFinPlan(c.rows), D = XP_DASH(P);
+  const B = (t, col) => ({ t, b: 1, c: col || P.text });
+  const rows = [[B('TOTAL', P.blue), B(f.fechaNormal), B('sin abonos', P.text2), B(fmt(PRESTAMO_INICIAL)), B(fmt(f.intNormal)), D, B(fmt(f.gmfNormal)), B(fmt(f.totalNormal), P.amber), B('$0')]];
+  let note = '';
+  if (f.hayAbonos) {
+    rows.push([B('TOTAL', P.green), B(f.fechaCon, P.green), B('con abonos', P.green), B(fmt(PRESTAMO_INICIAL), P.green), B(fmt(f.intCon), P.green), B('+' + fmt(f.abonado), P.green), B(fmt(f.gmfCon), P.green), B(fmt(f.totalCon), P.green), B('$0', P.green)]);
+    note = `<div style="font-size:11.5px;color:${P.text3};margin-top:10px;line-height:1.6">Con tus abonos terminas ${f.cuotasAhorradas > 0 ? `<b style="color:${P.green}">${f.cuotasAhorradas} cuota${f.cuotasAhorradas === 1 ? '' : 's'} antes</b> y ` : ''}pagas <b style="color:${P.green}">≈ ${fmt(f.ahorroTotal)} menos</b> en total. No incluye mora.</div>`;
+  }
+  return { rows, note };
+}
+// Dos o tres tarjetas para el Resumen: total del préstamo (plan del banco), total con abonos y lo que falta
+function xpTotalTiles(P, c) {
+  const f = calcFinPlan(c.rows);
+  const t1 = xpStat(P, 'Total del préstamo', fmt(f.totalNormal), P.text, `sin abonos · termina ${f.fechaNormal}`);
+  const t3 = xpStat(P, 'Falta por pagar', fmt(f.falta), P.amber, `ya pagado ${fmt(f.yaPagado)}`);
+  if (!f.hayAbonos) return xpGrid(2, t1 + t3);
+  const t2 = xpStat(P, 'Total con tus abonos', fmt(f.totalCon), P.green, `termina ${f.fechaCon} · ahorras ≈ ${fmt(f.ahorroTotal)}`);
+  return xpGrid(3, t1 + t2 + t3);
 }
 const XP_DASH = (P) => ({ t: '—', c: P.text3 });
 
@@ -4214,7 +4198,7 @@ function xpPendientesPages(P, c) {
   if (c.pendientes.some(i => daysBetween(today, rows[i].fechaProg) < 0)) {
     pages.forEach(pg => { pg.body += `<div style="font-size:11.5px;color:${P.text3};margin-top:10px">Las fechas en <span style="color:${P.red};font-weight:600">rojo</span> corresponden a cuotas vencidas (con mora según el pagaré).</div>`; });
   }
-  return xpWithFin(P, c, pages);
+  return pages;
 }
 
 function xpPagadasPages(P, c) {
@@ -4261,7 +4245,7 @@ function xpAbonosPages(P, c) {
       fmt(r.saldoCalc)
     ];
   };
-  return xpWithFin(P, c, xpTablePages(P, 'Abonos a capital', c.abonos, cols, rowFn, tiles));
+  return xpTablePages(P, 'Abonos a capital', c.abonos, cols, rowFn, tiles);
 }
 
 function xpCompletaPages(P, c) {
@@ -4287,7 +4271,7 @@ function xpCompletaPages(P, c) {
       fmt(r.saldoCalc)
     ];
   };
-  return xpWithFin(P, c, xpTablePages(P, 'Tabla de amortización', rows.map((_, i) => i), cols, rowFn, tiles));
+  return xpTablePages(P, 'Tabla de amortización', rows.map((_, i) => i), cols, rowFn, tiles, xpTotalRows(P, c));
 }
 
 const XP_BUILDERS = {
