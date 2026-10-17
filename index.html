@@ -227,8 +227,6 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 .tbl-date,.tbl-val{padding:5px 7px;background:var(--bg5);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;font-family:var(--mono);outline:none;transition:border-color 0.2s;width:115px;}
 .tbl-date{color:var(--text2);}
 .tbl-date:focus,.tbl-val:focus{border-color:var(--blue);}
-.tbl-note{padding:5px 7px;background:var(--bg5);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:10px;font-family:var(--font);outline:none;width:120px;transition:border-color 0.2s;}
-.tbl-note:focus{border-color:var(--blue);color:var(--text);}
 .status-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:20px;font-size:10px;font-weight:600;}
 .badge-paid{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,212,160,0.25);}
 .badge-pending{background:var(--bg4);color:var(--text3);border:1px solid var(--border);}
@@ -360,7 +358,6 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 /* READ-ONLY MODE — scoped to editable data inputs only */
 body.readonly-mode .tbl-date,
 body.readonly-mode .tbl-val,
-body.readonly-mode .tbl-note,
 body.readonly-mode input[type="number"],
 body.readonly-mode select,
 body.readonly-mode textarea,
@@ -452,7 +449,6 @@ body.readonly-mode #tab-log {
 .log-icon.reset  { background: var(--red-dim); color: var(--red); }
 .log-icon.import { background: rgba(155,135,245,0.1); color: var(--purple); }
 .log-icon.edit   { background: var(--amber-dim); color: var(--amber); }
-.log-icon.note   { background: rgba(34,211,238,0.08); color: var(--cyan); }
 .log-msg { flex: 1; color: var(--text2); line-height: 1.5; }
 .log-msg strong { color: var(--text); }
 .log-val { font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
@@ -662,12 +658,10 @@ body.readonly-mode #tab-log {
   /* Siempre ocultos en móvil por espacio (igual que antes) ─────────────  */
   tbody td[data-label="Días"],
   tbody td[data-label="Ahorro abono"],
-  tbody td[data-label="Nota"] { display: none; }
 
   tbody tr.row-eliminated td { opacity: 0.5; }
 
   .tbl-date { width: 100%; }
-  .tbl-note { width: 100%; }
 }
 
 
@@ -817,7 +811,7 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
 
 @media print {
   body{background:#fff;color:#111;}
-  .site-header,.next-banner,.interest-ticker,.savings-banner,.progress-block,.top-row,.export-bar,.filter-btns,.btn,.tbl-date,.tbl-val,.tbl-note,input[type="checkbox"]{display:none!important;}
+  .site-header,.next-banner,.interest-ticker,.savings-banner,.progress-block,.top-row,.export-bar,.filter-btns,.btn,.tbl-date,.tbl-val,input[type="checkbox"]{display:none!important;}
   .table-wrap{border:1px solid #ccc;border-radius:0;}
   thead th{background:#f5f5f5;color:#333;}
   tbody tr{border-bottom:1px solid #eee;}
@@ -1406,7 +1400,6 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
                     a pagar</th>
                   <th>Saldo restante</th>
                   <th>Fecha pago</th>
-                  <th class="col-extra">Nota</th>
                 </tr>
               </thead>
               <tbody id="tbody"></tbody>
@@ -1794,10 +1787,10 @@ function pushStateToFirestore() {
 
 // ── STATE ──────────────────────────────────────────────────────────────────────
 const RE_FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
-const LOG_TYPES = ['paid','abono','reset','import','edit','note','gmf'];
+const LOG_TYPES = ['paid','abono','reset','import','edit','gmf'];
 
 function emptyPago() {
-  return { pagada:false, fecha:'', valor:'', abono:0, abonoFecha:'', nota:'', gmfCobrado:true };
+  return { pagada:false, fecha:'', valor:'', abono:0, abonoFecha:'', gmfCobrado:true };
 }
 function emptyState() {
   return { pagos: Array.from({ length: PLAZO_MESES }, emptyPago) };
@@ -1816,7 +1809,6 @@ function sanitizeState(s) {
       valor:      (typeof p.valor === 'number' || typeof p.valor === 'string') ? String(p.valor).slice(0, 20) : '',
       abono:      (isFinite(abono) && abono > 0 && abono <= PRESTAMO_INICIAL) ? abono : 0,
       abonoFecha: (typeof p.abonoFecha === 'string' && RE_FECHA_ISO.test(p.abonoFecha)) ? p.abonoFecha : '',
-      nota:       typeof p.nota === 'string' ? p.nota.slice(0, 40) : '',
       gmfCobrado: p.gmfCobrado !== false
     });
   }
@@ -2888,7 +2880,6 @@ function renderTable(rows) {
       <td data-label="Total real"><span class="num" style="color:${r.esPostLiquidacion?'var(--text3)':r.esLiquidacion?'var(--amber)':'var(--amber)'};font-weight:600">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : fmt(r.totalReal)}</span></td>
       <td data-label="Saldo"><span class="saldo-cell">${fmt(r.saldoCalc)}</span></td>
       <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" data-set-fecha="${i}">`}</td>
-      <td class="col-extra" data-label="Nota">${r.esPostLiquidacion ? '' : `<input type="text" class="tbl-note" value="${escapeHtml(p.nota||'')}" placeholder="Nota..." data-set-nota="${i}" maxlength="40">`}</td>
     `;
     tbody.appendChild(tr);
 
@@ -3213,7 +3204,6 @@ function renderTableFoot(rows) {
       <td data-label="Total a pagar"><span class="num tf-big">${fmt(total)}</span></td>
       <td data-label="Saldo final"><span class="num">$0</span></td>
       <td></td>
-      <td class="col-extra"></td>
     </tr>`;
   let html = fila('tf-banco', 'TOTAL del préstamo', `Plan del banco, sin abonos · termina ${f.fechaNormal}`,
                   PRESTAMO_INICIAL, f.intNormal, f.cuotaNormal, f.gmfNormal, f.totalNormal, '');
@@ -3222,7 +3212,7 @@ function renderTableFoot(rows) {
     html += fila('tf-con', 'TOTAL con tus abonos',
                  `Termina ${f.fechaCon} · cuota ${f.last + 1} de ${PLAZO_MESES}` + (f.cuotasAhorradas > 0 ? ` (${nCuotas(f.cuotasAhorradas)} menos)` : ''),
                  PRESTAMO_INICIAL, f.intCon, f.cuotaCon, f.gmfCon, f.totalCon, ahorro);
-    html += `<tr class="tf-note"><td colspan="14">El capital incluye ${fmt(f.abonado)} de abonos. Estimado: cada abono acorta el plazo (como ya hace la tabla) y las demás cuotas se pagan en su fecha. No incluye mora. "Ahorro" = lo que pagas de menos frente al plan del banco.</td></tr>`;
+    html += `<tr class="tf-note"><td colspan="13">El capital incluye ${fmt(f.abonado)} de abonos. Estimado: cada abono acorta el plazo (como ya hace la tabla) y las demás cuotas se pagan en su fecha. No incluye mora. "Ahorro" = lo que pagas de menos frente al plan del banco.</td></tr>`;
   }
   tf.innerHTML = html;
 }
@@ -3435,7 +3425,6 @@ function setFecha(i, v) {
   state.pagos[i].fecha = v; saveState(); render();
   return true;
 }
-function setNota(i, v)   { state.pagos[i].nota  = v; saveState(); return true; }
 function setGmfCobrado(i, v) { state.pagos[i].gmfCobrado = v; saveState(); render(); return true; }
 // Máximo que se puede abonar a la cuota idx: el capital de la propia cuota se
 // amortiza primero, así que el abono solo puede cubrir lo que quede después.
@@ -3745,7 +3734,7 @@ function csvCell(v) {
 
 function exportCSV() {
   const rows = calcRows();
-  const headers = ['#','Fecha Prog','Estado','Capital','Abono','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago','Nota'];
+  const headers = ['#','Fecha Prog','Estado','Capital','Abono','Interés','Días','Ahorro Abono','Cuota Base','GMF','Total Real','Saldo','Fecha Pago'];
   const lines = [headers.map(csvCell).join(',')];
   rows.forEach((r,i) => {
     const p = state.pagos[i];
@@ -3753,7 +3742,7 @@ function exportCSV() {
       i+1, FECHAS_LABEL[i], p.pagada?'Pagada':'Pendiente',
       r.cap, r.abono || 0, r.intReal, r.dias,
       r.ahorroAbono, r.cuota, r.gmfEfectivo, r.totalReal, r.saldoCalc,
-      p.fecha, p.nota || ''
+      p.fecha
     ].map(csvCell).join(','));
   });
   const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8;'});
@@ -3891,15 +3880,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnClearSyncBanco').addEventListener('click', clearSyncBanco);
 
   // ── Table event delegation ─────────────────────────────────────────────────
-  // Handles: checkboxes (toggle pago), GMF spans, abono buttons, date inputs, note inputs
+  // Handles: checkboxes (toggle pago), GMF spans, abono buttons, date inputs
   document.getElementById('tbody').addEventListener('change', function(e) {
     const el = e.target;
     if (el.dataset.togglePago !== undefined) {
       togglePago(parseInt(el.dataset.togglePago), el);
     } else if (el.dataset.setFecha !== undefined) {
       setFecha(parseInt(el.dataset.setFecha), el.value);
-    } else if (el.dataset.setNota !== undefined) {
-      setNota(parseInt(el.dataset.setNota), el.value);
     }
   });
   document.getElementById('tbody').addEventListener('click', function(e) {
@@ -4574,7 +4561,6 @@ function renderLog() {
     reset:  '<i class="fa-solid fa-rotate-left"></i>',
     import: '<i class="fa-solid fa-cloud-arrow-up"></i>',
     edit:   '<i class="fa-solid fa-pencil"></i>',
-    note:   '<i class="fa-solid fa-note-sticky"></i>',
     gmf:    '<i class="fa-solid fa-receipt"></i>',
   };
   list.innerHTML = auditLog.map(e => {
@@ -4721,14 +4707,6 @@ function submitPinModal() {
     if (readOnly) { showToast('Modo solo lectura activo', 'warn'); return false; }
     if (!_origSetFecha(i, v)) return false;
     if (v) addLog('edit', `Fecha pago cuota <strong>${i+1}</strong> → <strong>${escapeHtml(v)}</strong>`);
-    return true;
-  };
-
-  const _origSetNota = setNota;
-  setNota = function(i, v) {
-    if (readOnly) return false;
-    if (!_origSetNota(i, v)) return false;
-    if (v) addLog('note', `Nota cuota <strong>${i+1}</strong>: "${escapeHtml(v)}"`);
     return true;
   };
 
