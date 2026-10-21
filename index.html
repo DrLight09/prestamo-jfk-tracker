@@ -1650,8 +1650,10 @@ const AMORT_BANCO = [
 // correo y contraseña (Firebase Auth) y es el único que puede ESCRIBIR.
 // La protección real está en las reglas de Firestore (ver firestore.rules):
 // la interfaz de solo lectura es una comodidad, no la barrera de seguridad.
-// Recomendado: en Firebase Console → Authentication → Settings → User actions,
-// desactivar "Enable create (sign-up)" para que nadie pueda crear cuentas nuevas.
+// Ojo: NO desactivar "Habilitar la creación (registro)" en Authentication →
+// Configuración → Acciones del usuario: la auth anónima de los visitantes también
+// cuenta como registro y dejarían de poder leer. Las reglas ya impiden que otras
+// cuentas escriban.
 const firebaseConfig = {
   apiKey: "AIzaSyCvx24knPndHDHjyjaz_NT_9Vea0Wr0aFY",
   authDomain: "prestamo-jfk-tracker.firebaseapp.com",
