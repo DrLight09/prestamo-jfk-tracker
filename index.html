@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Seguimiento de las cuotas, abonos e intereses del préstamo con la Cooperativa JFK: saldo pendiente, próximas cuotas y gráfica de amortización.">
     <title>Tracker Préstamo — Cooperativa JFK</title>
     <link rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1118'/><text y='68' x='50' text-anchor='middle' font-size='62' font-family='sans-serif' fill='%235b8def'>$</text></svg>">
@@ -133,7 +134,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .progress-header span{font-size:12px;color:var(--text2);}
 .progress-header strong{font-size:15px;font-weight:700;font-family:var(--mono);}
 .track{height:6px;background:var(--bg5);border-radius:3px;overflow:hidden;margin-bottom:6px;}
-.fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--green));transition:width 0.6s cubic-bezier(0.16,1,0.3,1);}
+.fill{height:100%;width:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--green));transform-origin:left center;transform:scaleX(0);transition:transform 0.6s cubic-bezier(0.16,1,0.3,1);will-change:transform;}
 .progress-info{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);font-family:var(--mono);}
 
 /* TOP ROW */
@@ -264,7 +265,7 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 
 /* TABS */
 .tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border);}
-.tab{padding:7px 14px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:color 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);letter-spacing:0.3px;}
+.tab{padding:7px 14px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);letter-spacing:0.3px;}
 .tab.active{color:var(--blue);border-bottom-color:var(--blue);}
 .tab:hover:not(.active){color:var(--text);}
 .tab-panel{display:none;} .tab-panel.active{display:block;}
@@ -989,8 +990,7 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
             <span>Progreso del préstamo</span>
             <strong id="pctLabel">0%</strong>
           </div>
-          <div class="track"><div class="fill" id="progFill"
-              style="width:0%"></div></div>
+          <div class="track"><div class="fill" id="progFill"></div></div>
           <div class="progress-info">
             <span>$0</span>
             <span id="progPaid">Capital pagado: $0</span>
@@ -1770,6 +1770,12 @@ function attachFirestoreListener() {
       showToast('Otro dispositivo guardó cambios más nuevos: se reemplazaron ediciones tuyas que no se habían sincronizado.', 'warn', 8000);
     }
     if (remote.state) setLastSyncedTs(remoteTs);
+    // Si la nube trae exactamente lo que ya se está mostrando, se omite el re-render completo.
+    let _sinCambios = false;
+    try {
+      _sinCambios = !!remote.state && JSON.stringify(remote.state) === JSON.stringify(state) &&
+        (!remote.auditLog || JSON.stringify(remote.auditLog) === JSON.stringify(auditLog));
+    } catch (_) {}
     _applyingRemote = true;
     try {
       if (remote.state) {
@@ -1786,7 +1792,7 @@ function attachFirestoreListener() {
     } finally {
       _applyingRemote = false; // nunca debe quedar en true (bloquearía todas las subidas)
     }
-    if (typeof render === 'function') render();
+    if (!_sinCambios && typeof render === 'function') render();
   }, err => {
     _dbg('onSnapshot error:', err);
     if (err && err.code === 'permission-denied') {
@@ -2648,7 +2654,7 @@ function renderMetrics(rows) {
   const cuotasElim = PLAZO_MESES - cuotasEfect; // cuotas eliminadas por abonos a capital
   const pct = Math.round((PRESTAMO_INICIAL - saldoPend) / PRESTAMO_INICIAL * 100);
 
-  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progFill').style.transform = 'scaleX(' + (pct / 100) + ')';
   document.getElementById('pctLabel').textContent = pct + '%';
   document.getElementById('progPaid').textContent = 'Capital pagado: ' + fmt(PRESTAMO_INICIAL - saldoPend);
 
@@ -2882,9 +2888,9 @@ function renderTable(rows) {
     // ── Checkbox: deshabilitado si la deuda ya era 0 (cuota no aplica) ──────
     let checkboxHtml;
     if (r.esPostLiquidacion) {
-      checkboxHtml = `<input type="checkbox" disabled aria-label="Cuota ${i+1}: eliminada, el préstamo ya fue liquidado" title="El préstamo ya fue liquidado antes de esta cuota" style="opacity:0.2;cursor:not-allowed">`;
+      checkboxHtml = `<input type="checkbox" disabled name="pagada-${i+1}" aria-label="Cuota ${i+1}: eliminada, el préstamo ya fue liquidado" title="El préstamo ya fue liquidado antes de esta cuota" style="opacity:0.2;cursor:not-allowed">`;
     } else {
-      checkboxHtml = `<input type="checkbox" ${p.pagada?'checked':''} aria-label="Marcar cuota ${i+1} como pagada" data-toggle-pago="${i}">`;
+      checkboxHtml = `<input type="checkbox" ${p.pagada?'checked':''} name="pagada-${i+1}" aria-label="Marcar cuota ${i+1} como pagada" data-toggle-pago="${i}">`;
     }
 
     // ── Badge de liquidación (cuota donde conviene liquidar) ─────────────────
@@ -2912,7 +2918,7 @@ function renderTable(rows) {
       }</span></td>
       <td data-label="Total real"><span class="num" style="color:${r.esPostLiquidacion?'var(--text3)':r.esLiquidacion?'var(--amber)':'var(--amber)'};font-weight:600">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : fmt(r.totalReal)}</span></td>
       <td data-label="Saldo"><span class="saldo-cell">${fmt(r.saldoCalc)}</span></td>
-      <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" aria-label="Fecha de pago de la cuota ${i+1}" data-set-fecha="${i}">`}</td>
+      <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" name="fecha-pago-${i+1}" aria-label="Fecha de pago de la cuota ${i+1}" data-set-fecha="${i}">`}</td>
     `;
     tbody.appendChild(tr);
 
@@ -4857,6 +4863,7 @@ function setViewMode(mode, btn) {
   if (mode === 'summary') {
     document.body.classList.add('view-summary');
     renderSummaryView();
+    ensureCharts(); // la gráfica mini necesita Chart.js
   }
   document.querySelectorAll('.vmb-pill').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
@@ -4988,13 +4995,25 @@ function loadLib(src, cors) {
   });
   return _libPromises[src];
 }
-function _bootLibs() {
-  loadLib(LIB_URLS.chart, true).then(() => {
+function ensureCharts() {
+  return loadLib(LIB_URLS.chart, true).then(() => {
     try {
       renderChart(calcRows());
       if (document.body.classList.contains('view-summary')) renderSummaryView();
     } catch (e) { _dbg('Error dibujando gráficas:', e); }
   }).catch(e => _dbg('Chart.js no cargó:', e));
+}
+function _bootLibs() {
+  // Chart.js (la librería más pesada) solo se descarga cuando la gráfica se acerca a la pantalla.
+  const canvas = document.getElementById('myChart');
+  if ('IntersectionObserver' in window && canvas) {
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { io.disconnect(); ensureCharts(); }
+    }, { rootMargin: '200px' });
+    io.observe(canvas);
+  } else {
+    ensureCharts();
+  }
 
   loadLib(LIB_URLS.fbApp)
     .then(() => Promise.all([loadLib(LIB_URLS.fbAuth), loadLib(LIB_URLS.fbFirestore)]))
