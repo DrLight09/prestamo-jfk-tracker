@@ -381,12 +381,12 @@ body.readonly-mode .abono-modal-overlay {
   pointer-events: none !important;
   opacity: 0.35 !important;
 }
-body.readonly-mode #pinModalOverlay,
-body.readonly-mode #pinModalOverlay * {
+body.readonly-mode #loginModalOverlay,
+body.readonly-mode #loginModalOverlay * {
   pointer-events: auto !important;
   opacity: 1 !important;
 }
-body.readonly-mode #pinModalOverlay .btn {
+body.readonly-mode #loginModalOverlay .btn {
   pointer-events: auto !important;
   opacity: 1 !important;
 }
@@ -1098,6 +1098,11 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
                         id="roLabel">Solo lectura</span>
                     </button>
                   </div>
+                  <button type="button" class="btn btn-ghost" id="btnSignOut"
+                    style="margin-top:7px;width:100%"
+                    title="Cierra tu sesión: este dispositivo queda como visitante (solo lectura)">
+                    <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
+                  </button>
                   <button type="button" class="btn btn-ghost"
                     id="btnExportImage"
                     style="margin-top:7px;width:100%;background:rgba(91,141,239,0.07);color:var(--blue);border-color:rgba(91,141,239,0.3);">
@@ -1459,29 +1464,31 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
       </div>
     </div>
 
-    <div class="abono-modal-overlay" id="pinModalOverlay" role="dialog"
-      aria-modal="true" aria-labelledby="pinModalTitle">
+    <div class="abono-modal-overlay" id="loginModalOverlay" role="dialog"
+      aria-modal="true" aria-labelledby="loginModalTitle">
       <div class="abono-modal-box">
         <div class="abono-modal-header">
           <div class="abono-modal-icon"><i class="fa-solid fa-lock"></i></div>
           <div>
-            <div class="abono-modal-title" id="pinModalTitle">Desbloquear
+            <div class="abono-modal-title" id="loginModalTitle">Desbloquear
               edición</div>
-            <div class="abono-modal-sub">Ingresa el PIN para poder editar</div>
+            <div class="abono-modal-sub">Inicia sesión para poder editar</div>
           </div>
         </div>
-        <input type="password" inputmode="numeric" class="abono-modal-input"
-          id="pinModalInput" placeholder="PIN" autocomplete="off">
-        <div id="pinModalError"
+        <input type="email" class="abono-modal-input" id="loginEmail"
+          placeholder="Correo" autocomplete="username" style="font-size:13px;margin-bottom:8px">
+        <input type="password" class="abono-modal-input"
+          id="loginPass" placeholder="Contraseña" autocomplete="current-password" style="font-size:13px">
+        <div id="loginError"
           style="display:none;font-size:11.5px;color:var(--red);margin:-6px 0 10px;">
           <i class="fa-solid fa-triangle-exclamation"
-            style="margin-right:4px"></i>PIN incorrecto, intenta de nuevo
+            style="margin-right:4px"></i><span id="loginErrorText"></span>
         </div>
         <div class="abono-modal-btns">
           <button type="button" class="btn btn-ghost"
-            id="btnClosePinModal">Cancelar</button>
+            id="btnCloseLoginModal">Cancelar</button>
           <button type="button" class="btn btn-success"
-            id="btnSubmitPinModal"><i class="fa-solid fa-unlock"></i>
+            id="btnSubmitLoginModal"><i class="fa-solid fa-unlock"></i>
             Desbloquear</button>
         </div>
       </div>
@@ -1639,12 +1646,12 @@ const AMORT_BANCO = [
 ];
 
 // ── FIREBASE SYNC ────────────────────────────────────────────────────────────
-// Cualquiera que abra el link sincroniza datos (lectura y escritura a nivel
-// de Firestore), pero la interfaz solo permite editar si se desbloquea con
-// el PIN (ver sección PIN LOCK más abajo). Esto protege contra ediciones
-// accidentales de un visitante casual, no contra alguien decidido a forzar
-// la consola del navegador — si necesitas esa protección más fuerte, se
-// puede volver a un esquema con login real.
+// Los visitantes entran con auth anónima y solo LEEN. El dueño inicia sesión con
+// correo y contraseña (Firebase Auth) y es el único que puede ESCRIBIR.
+// La protección real está en las reglas de Firestore (ver firestore.rules):
+// la interfaz de solo lectura es una comodidad, no la barrera de seguridad.
+// Recomendado: en Firebase Console → Authentication → Settings → User actions,
+// desactivar "Enable create (sign-up)" para que nadie pueda crear cuentas nuevas.
 const firebaseConfig = {
   apiKey: "AIzaSyCvx24knPndHDHjyjaz_NT_9Vea0Wr0aFY",
   authDomain: "prestamo-jfk-tracker.firebaseapp.com",
@@ -1658,6 +1665,11 @@ const FS_DOC_PATH = ['prestamoJFK', 'data']; // colección/documento en Firestor
 
 let fbApp = null, fbAuth = null, fbDb = null;
 let _applyingRemote = false; // evita que el listener re-dispare saveState()
+let _unsubSnap = null;       // cancela el listener de Firestore antes de volver a engancharlo
+// Dueño = sesión con correo/contraseña (no anónima). Solo él puede subir cambios.
+function isOwner() {
+  return !!(fbAuth && fbAuth.currentUser && !fbAuth.currentUser.isAnonymous);
+}
 // Última versión local confirmada por Firestore (persistida para sobrevivir recargas).
 // Sirve para avisar cuando la nube trae algo más nuevo y tenías ediciones sin subir.
 const SYNC_SK = SK + '_synced';
@@ -1689,21 +1701,28 @@ function initFirebaseSync() {
     return;
   }
 
-  fbAuth.signInAnonymously().catch(e => {
-    _dbg('Error signInAnonymously:', e);
-    showToast('No se pudo conectar la sincronización (revisa que Anonymous Auth esté habilitado).', 'error', 6000);
-  });
-
+  // Sin sesión guardada (primera visita o tras cerrar sesión) → visitante anónimo.
+  // Si hay sesión del dueño guardada, Firebase la restaura sola y no se llega aquí.
   fbAuth.onAuthStateChanged(user => {
-    if (!user) return;
+    if (!user) {
+      fbAuth.signInAnonymously().catch(e => {
+        _dbg('Error signInAnonymously:', e);
+        showToast('No se pudo conectar la sincronización (revisa que Anonymous Auth esté habilitado).', 'error', 6000);
+      });
+      return;
+    }
+    // Si se perdió la sesión del dueño mientras la edición estaba desbloqueada, se vuelve a bloquear.
+    if (user.isAnonymous && typeof readOnly !== 'undefined' && !readOnly) _setReadOnly(true, { silent: true });
+    if (typeof _placeReadOnlyButton === 'function') _placeReadOnlyButton();
     attachFirestoreListener();
   });
 }
 
 function attachFirestoreListener() {
   if (!fbDb) return;
+  if (_unsubSnap) { _unsubSnap(); _unsubSnap = null; }   // evita listeners duplicados al cambiar de sesión
   const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
-  ref.onSnapshot(snap => {
+  _unsubSnap = ref.onSnapshot(snap => {
     if (!snap.exists) {
       // No hay nada remoto todavía: subimos lo que haya local para inicializar.
       // Solo si el SERVIDOR confirmó que no existe: un snapshot de caché/offline
@@ -1736,7 +1755,8 @@ function attachFirestoreListener() {
     // nueva) para que la nube quede al día. Así un guardado nunca desaparece.
     const remoteTs = (remote.state && remote.state._updatedAt) || 0;
     const localTs  = (state && state._updatedAt) || 0;
-    if (remote.state && remoteTs < localTs) {
+    // Solo el dueño puede re-subir su versión; un visitante siempre adopta lo de la nube.
+    if (remote.state && remoteTs < localTs && isOwner()) {
       pushStateToFirestore();
       return;
     }
@@ -1764,11 +1784,15 @@ function attachFirestoreListener() {
     if (typeof render === 'function') render();
   }, err => {
     _dbg('onSnapshot error:', err);
+    if (err && err.code === 'permission-denied') {
+      showToast('Sin permiso para leer la nube: revisa las reglas de Firestore.', 'error', 6000);
+    }
   });
 }
 
 function pushStateToFirestore() {
-  if (!fbDb || _applyingRemote) return;
+  // Los visitantes (anónimos) nunca suben: las reglas de Firestore igual lo rechazarían.
+  if (!fbDb || _applyingRemote || !isOwner()) return;
   try {
     const ref = fbDb.collection(FS_DOC_PATH[0]).doc(FS_DOC_PATH[1]);
     const tsEnviado = (state && state._updatedAt) || 0;
@@ -3821,12 +3845,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnCloseAbonoModal').addEventListener('click', closeAbonoModal);
   document.getElementById('btnSaveAbonoModal').addEventListener('click', saveAbonoModal);
 
-  // ── PIN modal ─────────────────────────────────────────────────────────────
-  document.getElementById('btnClosePinModal').addEventListener('click', closePinModal);
-  document.getElementById('btnSubmitPinModal').addEventListener('click', submitPinModal);
-  document.getElementById('pinModalInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') submitPinModal();
-    if (e.key === 'Escape') closePinModal();
+  // ── Login modal ───────────────────────────────────────────────────────────
+  document.getElementById('btnCloseLoginModal').addEventListener('click', closeLoginModal);
+  document.getElementById('btnSubmitLoginModal').addEventListener('click', submitLoginModal);
+  ['loginEmail', 'loginPass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitLoginModal();
+      if (e.key === 'Escape') closeLoginModal();
+    });
   });
 
   // ── View mode pills ───────────────────────────────────────────────────────
@@ -3868,6 +3894,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
   document.getElementById('btnResetAll').addEventListener('click', resetAll);
   document.getElementById('btnReadOnly').addEventListener('click', toggleReadOnly);
+  document.getElementById('btnSignOut').addEventListener('click', cerrarSesion);
   document.getElementById('btnExportImage').addEventListener('click', exportImage);
   document.getElementById('btnRunTests').addEventListener('click', runTestsUI);
 
@@ -4589,18 +4616,17 @@ function clearLog() {
 }
 
 // ── READ-ONLY MODE ────────────────────────────────────────────────────────────
-// Arranca SIEMPRE bloqueado. Para editar hace falta el PIN (solo tú lo sabes).
-const EDIT_PIN = '2927';
+// Arranca SIEMPRE bloqueado. Para editar hay que iniciar sesión como dueño
+// (correo y contraseña de Firebase Auth). Si la sesión ya está abierta en este
+// dispositivo, desbloquear no vuelve a pedir la contraseña.
 let readOnly = true;
 document.body.classList.add('readonly-mode');
 document.addEventListener('DOMContentLoaded', () => { _showOnlyDebeHoyTab(); _placeReadOnlyButton(); });
 
 function toggleReadOnly() {
-  if (readOnly) {
-    openPinModal();
-  } else {
-    _setReadOnly(true);
-  }
+  if (!readOnly) { _setReadOnly(true); return; }   // bloquear: la sesión sigue abierta
+  if (isOwner()) { _setReadOnly(false); return; }  // ya hay sesión de dueño
+  openLoginModal();
 }
 
 // Mueve el botón de solo lectura a la ubicación correcta:
@@ -4613,7 +4639,9 @@ function _placeReadOnlyButton() {
   if (readOnly) {
     document.getElementById('roSlotHoy').appendChild(btn);
     btn.classList.add('ro-banner');
-    if (label) label.textContent = 'Vista de solo lectura — toca para desbloquear con PIN';
+    if (label) label.textContent = isOwner()
+      ? 'Vista de solo lectura — toca para desbloquear'
+      : 'Vista de solo lectura — toca para iniciar sesión';
   } else {
     document.getElementById('roSlotAbono').appendChild(btn);
     btn.classList.remove('ro-banner');
@@ -4621,7 +4649,8 @@ function _placeReadOnlyButton() {
   }
 }
 
-function _setReadOnly(value) {
+function _setReadOnly(value, opts) {
+  const silent = !!(opts && opts.silent);   // sin toast ni log (p. ej. al perderse la sesión)
   readOnly = value;
   document.body.classList.toggle('readonly-mode', readOnly);
   const btn   = document.getElementById('btnReadOnly');
@@ -4640,7 +4669,9 @@ function _setReadOnly(value) {
   // La UI del botón se actualiza primero: no debe quedar a medias si algo
   // más abajo (toast, log, sync con Firestore) llegara a fallar.
   _placeReadOnlyButton();
-  if (readOnly) {
+  if (silent) {
+    if (readOnly) showToast('Sesión cerrada: modo solo lectura', 'warn', 3000);
+  } else if (readOnly) {
     showToast('Modo solo lectura activado', 'warn', 3000);
     addLog('edit', 'Modo solo lectura <strong>activado</strong>');
   } else {
@@ -4664,29 +4695,87 @@ function _showOnlyDebeHoyTab() {
   }
 }
 
-function openPinModal() {
-  const overlay = document.getElementById('pinModalOverlay');
-  const input = document.getElementById('pinModalInput');
-  const err = document.getElementById('pinModalError');
-  err.style.display = 'none';
-  input.value = '';
+function openLoginModal() {
+  const overlay = document.getElementById('loginModalOverlay');
+  const email = document.getElementById('loginEmail');
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginPass').value = '';
   overlay.classList.add('open');
-  setTimeout(() => input.focus(), 50);
+  setTimeout(() => (email.value ? document.getElementById('loginPass') : email).focus(), 50);
 }
-function closePinModal() {
-  document.getElementById('pinModalOverlay').classList.remove('open');
+function closeLoginModal() {
+  document.getElementById('loginModalOverlay').classList.remove('open');
+  document.getElementById('loginPass').value = '';
 }
-function submitPinModal() {
-  const input = document.getElementById('pinModalInput');
-  const err = document.getElementById('pinModalError');
-  if (input.value === EDIT_PIN) {
-    closePinModal();
-    _setReadOnly(false);
-  } else {
-    err.style.display = 'block';
-    input.value = '';
-    input.focus();
+function showLoginError(msg) {
+  document.getElementById('loginErrorText').textContent = msg;
+  document.getElementById('loginError').style.display = 'block';
+}
+function authErrorMsg(e) {
+  switch (e && e.code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-email':
+      return 'Correo o contraseña incorrectos.';
+    case 'auth/too-many-requests':
+      return 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
+    case 'auth/network-request-failed':
+      return 'Sin conexión: no se pudo iniciar sesión.';
+    case 'auth/operation-not-allowed':
+      return 'Falta habilitar "Correo/contraseña" en Firebase Authentication.';
+    case 'auth/user-disabled':
+      return 'Esta cuenta está deshabilitada.';
+    default:
+      return 'No se pudo iniciar sesión.';
   }
+}
+async function submitLoginModal() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const passEl = document.getElementById('loginPass');
+  const pass = passEl.value;
+  if (!email || !pass) { showLoginError('Ingresa tu correo y contraseña.'); return; }
+  if (!fbAuth) { showLoginError('La sincronización no está disponible (sin conexión o bloqueada).'); return; }
+  const btn = document.getElementById('btnSubmitLoginModal');
+  btn.disabled = true;
+  try {
+    await fbAuth.signInWithEmailAndPassword(email, pass);
+    closeLoginModal();
+    _setReadOnly(false);
+  } catch (e) {
+    _dbg('Error signInWithEmailAndPassword:', e);
+    showLoginError(authErrorMsg(e));
+    passEl.value = '';
+    passEl.focus();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Cierra la sesión del dueño: este dispositivo vuelve a ser visitante (solo lectura).
+// Antes espera a que los cambios pendientes lleguen a Firestore, porque una vez
+// anónimo ya no tendría permiso para subirlos.
+async function cerrarSesion() {
+  if (!isOwner()) { showToast('No hay una sesión iniciada.', 'info', 2500); return; }
+  const esperarSync = () => Promise.race([
+    fbDb.waitForPendingWrites().then(() => true).catch(() => false),
+    new Promise(r => setTimeout(() => r(false), 4000))
+  ]);
+  const cerrar = async () => {
+    try {
+      addLog('edit', 'Sesión <strong>cerrada</strong>');   // este log también se sube: se espera antes de salir
+      await esperarSync();
+      await fbAuth.signOut();   // onAuthStateChanged vuelve a entrar como anónimo y bloquea la edición
+    } catch (e) {
+      _dbg('Error signOut:', e);
+      showToast('No se pudo cerrar la sesión.', 'error', 4000);
+    }
+  };
+  if (await esperarSync()) { cerrar(); return; }
+  showConfirm(
+    'Hay cambios sin sincronizar con la nube.\nSi cierras sesión ahora, podrían perderse. ¿Cerrar sesión de todas formas?',
+    cerrar
+  );
 }
 
 // ── GUARD + LOG WRAPPERS ────────────────────────────────────────────────────────
