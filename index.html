@@ -8,26 +8,27 @@
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1118'/><text y='68' x='50' text-anchor='middle' font-size='62' font-family='sans-serif' fill='%235b8def'>$</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <!-- display=optional: evita el salto de diseño (CLS) al cambiar de fuente. En la 1.ª visita
+         puede verse la fuente del sistema; desde la 2.ª (ya en caché) se usa Instrument Sans.
+         Si prefieres ver siempre la fuente web, cambia optional por swap. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=optional"
       rel="stylesheet">
+    <!-- Font Awesome: carga sin bloquear el primer render -->
     <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      media="print" onload="this.media='all'"
       crossorigin="anonymous" referrerpolicy="no-referrer">
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"
-      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
-      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Firebase (proyecto prestamo-jfk-tracker) -->
-    <script
-      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script
-      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-    <script
-      src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <noscript><link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous" referrerpolicy="no-referrer"></noscript>
+    <!-- Chart.js, Firebase y html2canvas ya NO se cargan aquí: se cargan de forma diferida
+         desde el script principal (ver "CARGA DIFERIDA DE LIBRERÍAS" al final). -->
     <style>
+/* Font Awesome con font-display:swap (el CSS original usa "block" y oculta los iconos) */
+@font-face{font-family:"Font Awesome 6 Free";font-style:normal;font-weight:900;font-display:swap;src:url(https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2) format("woff2");}
+@font-face{font-family:"Font Awesome 6 Free";font-style:normal;font-weight:400;font-display:swap;src:url(https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2) format("woff2");}
 :root {
   --bg:#090b10; --bg2:#0e1118; --bg3:#141720; --bg4:#1a1e28; --bg5:#20242f;
   --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.1); --border3:rgba(255,255,255,0.16);
@@ -263,7 +264,7 @@ input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:var(--
 
 /* TABS */
 .tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border);}
-.tab{padding:7px 14px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);letter-spacing:0.3px;}
+.tab{padding:7px 14px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:color 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);letter-spacing:0.3px;}
 .tab.active{color:var(--blue);border-bottom-color:var(--blue);}
 .tab:hover:not(.active){color:var(--text);}
 .tab-panel{display:none;} .tab-panel.active{display:block;}
@@ -477,6 +478,8 @@ body.readonly-mode #tab-log {
 .next-banner {
   animation: fadeInUp 0.4s ease-out both;
 }
+body.no-anim .metric-card,
+body.no-anim .next-banner { animation: none; }
 
 /* ── GLOBAL TOAST ─────────────────────────────────────────────────────── */
 #globalToast {
@@ -660,7 +663,7 @@ body.readonly-mode #tab-log {
 
   /* Siempre ocultos en móvil por espacio (igual que antes) ─────────────  */
   tbody td[data-label="Días"],
-  tbody td[data-label="Ahorro abono"],
+  tbody td[data-label="Ahorro abono"] { display: none !important; }
 
   tbody tr.row-eliminated td { opacity: 0.5; }
 
@@ -838,7 +841,7 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
       <span class="gt-msg" id="gtMsg"></span>
     </div>
 
-    <div class="page">
+    <main class="page">
 
       <!-- HEADER -->
       <div class="site-header">
@@ -1492,7 +1495,7 @@ body.readonly-mode .xp-overlay .xp-opt.disabled input{cursor:not-allowed!importa
             Desbloquear</button>
         </div>
       </div>
-    </div>
+    </main>
 
     <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────────────────
@@ -2879,9 +2882,9 @@ function renderTable(rows) {
     // ── Checkbox: deshabilitado si la deuda ya era 0 (cuota no aplica) ──────
     let checkboxHtml;
     if (r.esPostLiquidacion) {
-      checkboxHtml = `<input type="checkbox" disabled title="El préstamo ya fue liquidado antes de esta cuota" style="opacity:0.2;cursor:not-allowed">`;
+      checkboxHtml = `<input type="checkbox" disabled aria-label="Cuota ${i+1}: eliminada, el préstamo ya fue liquidado" title="El préstamo ya fue liquidado antes de esta cuota" style="opacity:0.2;cursor:not-allowed">`;
     } else {
-      checkboxHtml = `<input type="checkbox" ${p.pagada?'checked':''} data-toggle-pago="${i}">`;
+      checkboxHtml = `<input type="checkbox" ${p.pagada?'checked':''} aria-label="Marcar cuota ${i+1} como pagada" data-toggle-pago="${i}">`;
     }
 
     // ── Badge de liquidación (cuota donde conviene liquidar) ─────────────────
@@ -2909,7 +2912,7 @@ function renderTable(rows) {
       }</span></td>
       <td data-label="Total real"><span class="num" style="color:${r.esPostLiquidacion?'var(--text3)':r.esLiquidacion?'var(--amber)':'var(--amber)'};font-weight:600">${r.esPostLiquidacion ? '<span style="color:var(--text3)">—</span>' : fmt(r.totalReal)}</span></td>
       <td data-label="Saldo"><span class="saldo-cell">${fmt(r.saldoCalc)}</span></td>
-      <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" data-set-fecha="${i}">`}</td>
+      <td data-label="Fecha pago">${r.esPostLiquidacion ? '<span style="color:var(--text3);font-size:11px">—</span>' : `<input type="date" class="tbl-date" value="${p.fecha}" aria-label="Fecha de pago de la cuota ${i+1}" data-set-fecha="${i}">`}</td>
     `;
     tbody.appendChild(tr);
 
@@ -3831,7 +3834,7 @@ function _commitAbonoModal(val) {
   return true;
 }
 document.addEventListener('DOMContentLoaded', () => {
-  initFirebaseSync();
+  // (initFirebaseSync() se llama desde _bootLibs() cuando Firebase termina de cargar)
   // ── Modal input listeners ─────────────────────────────────────────────────
   document.getElementById('abonoEditVal').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') saveAbonoModal();
@@ -4420,7 +4423,12 @@ function xpUpdateGo() {
 
 async function xpGenerate() {
   if (xpBusy) return;
-  if (typeof html2canvas === 'undefined') { showToast('No se pudo cargar el generador de imágenes (revisa tu conexión).', 'error', 5000); return; }
+  if (typeof html2canvas === 'undefined') {
+    xpBusy = true; // evita dobles clics mientras se descarga la librería
+    try { await loadLib(LIB_URLS.html2canvas, true); } catch (e) { _dbg('html2canvas no cargó:', e); }
+    xpBusy = false;
+    if (typeof html2canvas === 'undefined') { showToast('No se pudo cargar el generador de imágenes (revisa tu conexión).', 'error', 5000); return; }
+  }
   const sel = xpSelected();
   if (!sel.length) return;
   const theme = document.getElementById('xpTheme').value, quality = document.getElementById('xpQuality').value;
@@ -4462,6 +4470,7 @@ async function xpGenerate() {
 
 // Punto de entrada del botón "Exportar resumen como imagen"
 function exportImage() {
+  loadLib(LIB_URLS.html2canvas, true).catch(() => {}); // precarga mientras el usuario elige opciones
   if (!xpEl) xpBuild();
   xpRefresh();
   xpEl.classList.add('open');
@@ -4952,6 +4961,52 @@ function renderSummaryView() {
 render();
 renderLog();
 initCuotaTexts();
+
+// ── CARGA DIFERIDA DE LIBRERÍAS ───────────────────────────────────────────────
+// Chart.js, Firebase y html2canvas (~300 KiB) antes bloqueaban el primer render.
+// Ahora la página se pinta primero con los datos locales y las librerías se cargan
+// cuando el navegador está libre. Chart.js dibuja la gráfica al llegar; Firebase
+// inicia la sincronización; html2canvas solo se descarga al exportar la imagen.
+const LIB_URLS = {
+  chart:       'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
+  html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  fbApp:       'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+  fbAuth:      'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
+  fbFirestore: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'
+};
+const _libPromises = {};
+function loadLib(src, cors) {
+  if (_libPromises[src]) return _libPromises[src];
+  _libPromises[src] = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.async = true;
+    if (cors) { el.crossOrigin = 'anonymous'; el.referrerPolicy = 'no-referrer'; }
+    el.onload = () => resolve();
+    el.onerror = () => { delete _libPromises[src]; el.remove(); reject(new Error('No se pudo cargar ' + src)); };
+    document.head.appendChild(el);
+  });
+  return _libPromises[src];
+}
+function _bootLibs() {
+  loadLib(LIB_URLS.chart, true).then(() => {
+    try {
+      renderChart(calcRows());
+      if (document.body.classList.contains('view-summary')) renderSummaryView();
+    } catch (e) { _dbg('Error dibujando gráficas:', e); }
+  }).catch(e => _dbg('Chart.js no cargó:', e));
+
+  loadLib(LIB_URLS.fbApp)
+    .then(() => Promise.all([loadLib(LIB_URLS.fbAuth), loadLib(LIB_URLS.fbFirestore)]))
+    .then(() => initFirebaseSync())
+    .catch(e => {
+      _dbg('Firebase no cargó:', e);
+      showToast('No se pudo cargar la sincronización: trabajando solo en este dispositivo.', 'warn', 6000);
+    });
+}
+(window.requestIdleCallback || (cb => setTimeout(cb, 150)))(_bootLibs, { timeout: 1500 });
+// Las animaciones de entrada solo corren en la carga inicial (no en cada re-render).
+setTimeout(() => document.body.classList.add('no-anim'), 1500);
 </script>
   </body>
 </html>
