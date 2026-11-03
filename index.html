@@ -1845,7 +1845,8 @@ function sanitizeState(s) {
       fecha:      (typeof p.fecha === 'string' && RE_FECHA_ISO.test(p.fecha)) ? p.fecha : '',
       valor:      (typeof p.valor === 'number' || typeof p.valor === 'string') ? String(p.valor).slice(0, 20) : '',
       abono:      (isFinite(abono) && abono > 0 && abono <= PRESTAMO_INICIAL) ? abono : 0,
-      abonoFecha: (typeof p.abonoFecha === 'string' && RE_FECHA_ISO.test(p.abonoFecha)) ? p.abonoFecha : '',
+      // La fecha de abono solo tiene sentido si hay abono (evita fechas huérfanas tras borrar uno).
+      abonoFecha: (isFinite(abono) && abono > 0 && abono <= PRESTAMO_INICIAL && typeof p.abonoFecha === 'string' && RE_FECHA_ISO.test(p.abonoFecha)) ? p.abonoFecha : '',
       gmfCobrado: p.gmfCobrado !== false
     });
   }
@@ -2434,6 +2435,28 @@ function _runTestsCore() {
   assert('saldoEnFecha antes del abono: no lo descuenta', e3.saldo, PRESTAMO_INICIAL, 0);
   state.pagos[0].abono = 0;
   state.pagos[0].abonoFecha = '';
+
+  // ── Tests de pagos tardíos / anticipados (reloj de interés desde fecha PROGRAMADA) ──
+  // Caso real: 7 cuotas pagadas; la 6 un día antes (30 sep) y la 7 un día tarde (2 nov).
+  const pagosBak = JSON.parse(JSON.stringify(state.pagos));
+  const fechasReales = ['2026-04-28','2026-06-01','2026-07-01','2026-08-01','2026-09-01','2026-09-30','2026-11-02'];
+  fechasReales.forEach((f, i) => { state.pagos[i].pagada = true; state.pagos[i].fecha = f; state.pagos[i].abono = 0; state.pagos[i].abonoFecha = ''; });
+  const d = s => new Date(s + 'T00:00:00Z');
+  const l0 = saldoEnFecha(d('2026-11-01'));
+  // El 1 nov la cuota 7 aún no estaba pagada: se debe el período completo (30 días) de la cuota.
+  assert('Cuota 7 sin pagar aún (1 nov): interés == 30 días sobre saldo de la cuota 6',
+    l0.intAcum, calcIntSimple(calcRows()[5].saldoCalc, 30), 0);
+  const l1 = saldoEnFecha(d('2026-11-02'));
+  assert('Cuota 7 pagada 1 día tarde: saldo capital', l1.saldo, 17916453, 0);
+  assert('Cuota 7 pagada 1 día tarde: el 2 nov ya corre 1 día de interés', l1.dias, 1, 0);
+  assert('Cuota 7 pagada 1 día tarde: deuda == lo que muestra el banco', l1.deuda, 17926904, 0);
+  const l2 = saldoEnFecha(d('2026-11-05'));
+  assert('Cuota 7 tarde: 5 nov == 4 días desde la fecha programada', l2.dias, 4, 0);
+  const l3 = saldoEnFecha(d('2026-10-01'));
+  assert('Cuota 6 pagada anticipada (30 sep): el 1 oct interés == 0', l3.intAcum, 0, 0);
+  state.pagos = pagosBak;
+  const sb = sanitizeState({ pagos: Array.from({length: PLAZO_MESES}, () => ({ pagada:false, fecha:'', valor:'', abono:0, abonoFecha:'2026-08-21', gmfCobrado:true })) });
+  assert('sanitizeState: abonoFecha huérfana (abono 0) se limpia', sb.pagos[0].abonoFecha === '' ? 1 : 0, 1, 0);
 
   // ── Reporte en consola ────────────────────────────────────────────────────
   const label = `%c[JFK Tests] ${passed}/${passed+failed} pasados`;
