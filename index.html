@@ -2548,7 +2548,7 @@ function renderTicker(rows) {
     cuotasPagadas === 0 ? 'Sin pagos registrados' : `Tras ${cuotasPagadas} cuota${cuotasPagadas>1?'s':''} pagadas`;
   document.getElementById('tickerIntHoy').textContent = fmt(intHoy);
   document.getElementById('tickerIntSub').textContent =
-    diasHoy === 0 ? 'Interés pendiente: $0 (deuda congelada hasta fecha prog.)' : `Hace ${diasHoy} día${diasHoy!==1?'s':''} desde la fecha de inicio del período`;
+    diasHoy === 0 ? 'Interés pendiente: $0 (aún no pasa la fecha programada de la última cuota)' : `Hace ${diasHoy} día${diasHoy!==1?'s':''} desde la fecha de inicio del período`;
   document.getElementById('tickerDeudaHoy').textContent = fmt(deudaHoy);
   document.getElementById('tickerDeudaSub').textContent =
     `Capital $${saldo.toLocaleString('es-CO')} + interés $${intHoy.toLocaleString('es-CO')}`;
@@ -3276,8 +3276,8 @@ function render() {
 //   · Desde D el interés corre sobre el nuevo saldo (base = D).
 // Así la deuda total baja exactamente lo abonado (saldo + interés − abono) y ya no
 // se pierde el interés de antes de la fecha del abono.
-// Reglas que se conservan: el reloj de interés de una cuota pagada arranca en la
-// fecha PROGRAMADA (si pagas antes) o la real (si pagas tarde).
+// Regla: el reloj de interés de una cuota pagada arranca SIEMPRE en la fecha PROGRAMADA
+// (pagues antes o tarde): la cuota solo cubre el interés hasta esa fecha.
 // Un abono SIN fecha se asume hecho en la fecha consultada, solo si esa fecha es
 // hoy o futura (no se sabe cuándo ocurrió, así que no se aplica a fechas pasadas).
 function saldoEnFecha(consultaDate, rowsOpt) {
@@ -3297,7 +3297,10 @@ function saldoEnFecha(consultaDate, rowsOpt) {
     if (r.cap <= 0) continue; // fila post-liquidación
     if (p.pagada) {
       const fechaReal = p.fecha ? parseDate(p.fecha) : r.fechaProg;
-      const fechaEfectiva = toUTC(fechaReal) >= toUTC(r.fechaProg) ? fechaReal : r.fechaProg;
+      // La cuota solo cubre el interés hasta la fecha PROGRAMADA. Si pagas tarde, los días de
+      // atraso NO están pagados: siguen causando interés sobre el nuevo saldo (así lo muestra el
+      // banco). Por eso el reloj siempre arranca en la fecha programada, pagues antes o después.
+      const fechaEfectiva = r.fechaProg;
       eventos.push({ tipo: 'pago', fecha: fechaReal, base: fechaEfectiva, saldo: r.saldoCalc, label: `Cuota ${i+1} pagada` });
     } else if ((r.abono || 0) > 0 && !hayPagadaPosterior(i)) {
       // (si una cuota posterior ya está pagada, su saldoCalc ya incluye este abono)
